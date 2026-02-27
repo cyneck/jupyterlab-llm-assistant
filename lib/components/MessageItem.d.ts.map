@@ -1,0 +1,1 @@
+{"version":3,"file":"MessageItem.d.ts","sourceRoot":"","sources":["../../src/components/MessageItem.tsx"],"names":[],"mappings":"AAAA;;GAEG;AAEH,OAAO,KAAkB,MAAM,OAAO,CAAC;AACvC,OAAO,EAAE,WAAW,EAAE,MAAM,iBAAiB,CAAC;AAG9C,MAAM,WAAW,gBAAgB;IAC/B,OAAO,EAAE,WAAW,CAAC;CACtB;AAaD;;GAEG;AACH,eAAO,MAAM,WAAW,EAAE,KAAK,CAAC,EAAE,CAAC,gBAAgB,CA+FlD,CAAC;AAEF,eAAe,WAAW,CAAC"}

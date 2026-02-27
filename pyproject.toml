@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling>=1.5.0", "jupyterlab>=4.0.0", "hatch-nodejs-version>=0.3.2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jupyterlab_llm_assistant"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+classifiers = [
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Framework :: Jupyter :: JupyterLab :: Extensions",
+    "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "jupyterlab>=4.0.0",
+    "jupyter_server>=2.0.0",
+    "openai>=1.0.0",
+    "tornado>=6.0",
+    "pydantic>=2.0.0",
+]
+dynamic = ["version", "description", "authors", "urls", "keywords"]
+
+[project.optional-dependencies]
+test = [
+    "coverage",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-tornasync",
+]
+
+[tool.hatch.version]
+source = "nodejs"
+
+[tool.hatch.metadata.hooks.nodejs]
+fields = ["description", "authors", "urls"]
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["jupyterlab_llm_assistant/labextension"]
+exclude = [".github", "binder"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"jupyterlab_llm_assistant/labextension" = "share/jupyter/labextensions/jupyterlab-llm-assistant"
+"install.json" = "share/jupyter/labextensions/jupyterlab-llm-assistant/install.json"
+
+[tool.hatch.build.hooks.version]
+path = "jupyterlab_llm_assistant/_version.py"
+
+[tool.jupyter-releaser.hooks]
+before-build-npm = [
+    "python -m pip install jupyterlab>=4.0.0",
+    "jlpm",
+    "jlpm build:prod",
+]
+
+[tool.jupyter-releaser.options]
+version-cmd = "jlpm run version:bump"
+
+[tool.check-wheel-contents]
+ignore = ["W002"]
+
+[project.entry-points."jupyter_server.extension"]
+jupyterlab_llm_assistant = "jupyterlab_llm_assistant.serverextension:load_jupyter_server_extension"

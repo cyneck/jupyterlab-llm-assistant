@@ -1,0 +1,1088 @@
+/* LLM Assistant Chat Panel Styles */
+
+/* ==============================================================================
+   Chat Panel Container
+   ============================================================================== */
+
+.llm-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  overflow: hidden;
+}
+
+/* ==============================================================================
+   Header
+   ============================================================================== */
+
+.llm-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--jp-border-color0);
+  background-color: var(--jp-layout-color0);
+  flex-shrink: 0;
+}
+
+.llm-chat-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jp-ui-font-color0);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.llm-chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--jp-ui-font-color1);
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.llm-icon-btn:hover {
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color0);
+}
+
+.llm-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.llm-icon-btn.active {
+  background-color: var(--jp-brand-color1);
+  color: white;
+}
+
+/* ==============================================================================
+   Message List
+   ============================================================================== */
+
+.llm-message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.llm-message-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==============================================================================
+   Empty State
+   ============================================================================== */
+
+.llm-empty-state {
+  text-align: center;
+  padding: 32px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-empty-icon {
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.llm-empty-state h3 {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0 0 8px 0;
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-empty-state p {
+  font-size: 14px;
+  margin: 0 0 16px 0;
+}
+
+.llm-empty-hints {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+}
+
+.llm-empty-hints li {
+  padding: 4px 0;
+  position: relative;
+  padding-left: 16px;
+}
+
+.llm-empty-hints li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--jp-brand-color1);
+}
+
+/* ==============================================================================
+   Message Item
+   ============================================================================== */
+
+.llm-message-item {
+  display: flex;
+  gap: 12px;
+  animation: llm-message-fade-in 0.2s ease-out;
+}
+
+@keyframes llm-message-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.llm-message-item.user {
+  flex-direction: row-reverse;
+}
+
+.llm-message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.llm-message-item.user .llm-message-avatar {
+  background-color: var(--jp-brand-color1);
+  color: white;
+}
+
+.llm-message-item.assistant .llm-message-avatar {
+  background-color: var(--jp-accent-color1);
+  color: white;
+}
+
+.llm-message-item.system .llm-message-avatar {
+  background-color: var(--jp-warn-color1);
+  color: white;
+}
+
+.llm-message-content {
+  max-width: calc(100% - 56px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.llm-message-item.user .llm-message-content {
+  align-items: flex-end;
+}
+
+.llm-message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-message-role {
+  font-weight: 500;
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-message-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.llm-message-item.user .llm-message-bubble {
+  background-color: var(--jp-brand-color1);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.llm-message-item.assistant .llm-message-bubble,
+.llm-message-item.system .llm-message-bubble {
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  border-bottom-left-radius: 4px;
+}
+
+/* Error state */
+.llm-message-item.error .llm-message-bubble {
+  background-color: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+/* ==============================================================================
+   Input Area
+   ============================================================================== */
+
+.llm-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid var(--jp-border-color0);
+  background-color: var(--jp-layout-color0);
+  flex-shrink: 0;
+}
+
+.llm-image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background-color: var(--jp-layout-color1);
+  border-radius: 8px;
+}
+
+.llm-image-preview {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--jp-border-color1);
+}
+
+.llm-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.llm-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.llm-image-preview:hover .llm-image-remove {
+  opacity: 1;
+}
+
+.llm-image-remove:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.llm-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.llm-image-btn,
+.llm-send-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.llm-image-btn:hover:not(:disabled),
+.llm-send-btn:hover:not(:disabled) {
+  background-color: var(--jp-layout-color3);
+  color: var(--jp-ui-font-color0);
+}
+
+.llm-image-btn:disabled,
+.llm-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.llm-send-btn:not(:disabled) {
+  background-color: var(--jp-brand-color1);
+  color: white;
+}
+
+.llm-send-btn:not(:disabled):hover {
+  background-color: var(--jp-brand-color0);
+}
+
+.llm-text-input {
+  flex: 1;
+  min-height: 36px;
+  max-height: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 8px;
+  background-color: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.llm-text-input:focus {
+  border-color: var(--jp-brand-color1);
+}
+
+.llm-text-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.llm-input-hint {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+}
+
+/* ==============================================================================
+   Loading Indicator
+   ============================================================================== */
+
+.llm-loading-indicator {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.llm-loading-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.llm-loading-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--jp-ui-font-color2);
+  animation: llm-loading-bounce 1.4s ease-in-out infinite both;
+}
+
+.llm-loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.llm-loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes llm-loading-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ==============================================================================
+   Settings Panel
+   ============================================================================== */
+
+.llm-settings-panel {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.llm-settings-section {
+  margin-bottom: 24px;
+}
+
+.llm-settings-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--jp-ui-font-color2);
+  margin: 0 0 12px 0;
+}
+
+.llm-settings-field {
+  margin-bottom: 16px;
+}
+
+.llm-settings-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--jp-ui-font-color1);
+  margin-bottom: 6px;
+}
+
+.llm-settings-description {
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+  margin: 4px 0 0 0;
+}
+
+.llm-settings-input,
+.llm-settings-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 6px;
+  background-color: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.llm-settings-input:focus,
+.llm-settings-select:focus {
+  border-color: var(--jp-brand-color1);
+}
+
+.llm-settings-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.llm-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--jp-brand-color1);
+}
+
+.llm-settings-checkbox-label {
+  font-size: 13px;
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--jp-border-color0);
+}
+
+.llm-settings-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.llm-settings-btn-primary {
+  background-color: var(--jp-brand-color1);
+  color: white;
+}
+
+.llm-settings-btn-primary:hover:not(:disabled) {
+  background-color: var(--jp-brand-color0);
+}
+
+.llm-settings-btn-secondary {
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-settings-btn-secondary:hover {
+  background-color: var(--jp-layout-color3);
+}
+
+.llm-settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.llm-test-status {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.llm-test-status.success {
+  background-color: var(--jp-success-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-test-status.error {
+  background-color: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+/* ==============================================================================
+   New Settings Panel Styles
+   ============================================================================== */
+
+.llm-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 16px 0;
+  border-bottom: 1px solid var(--jp-border-color0);
+  margin-bottom: 16px;
+}
+
+.llm-settings-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--jp-ui-font-color0);
+}
+
+.llm-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--jp-ui-font-color2);
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.llm-close-btn:hover {
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color0);
+}
+
+.llm-settings-content {
+  padding: 0;
+}
+
+.llm-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--jp-ui-font-color2);
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--jp-border-color2);
+}
+
+.llm-settings-section {
+  margin-bottom: 24px;
+}
+
+.llm-settings-field {
+  margin-bottom: 16px;
+}
+
+.llm-settings-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--jp-ui-font-color1);
+  margin-bottom: 6px;
+}
+
+.llm-settings-field input[type="text"],
+.llm-settings-field input[type="password"],
+.llm-settings-field input[type="number"],
+.llm-settings-field select,
+.llm-settings-field textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 6px;
+  background-color: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.llm-settings-field input:focus,
+.llm-settings-field select:focus,
+.llm-settings-field textarea:focus {
+  border-color: var(--jp-brand-color1);
+  box-shadow: 0 0 0 2px rgba(19, 124, 189, 0.2);
+}
+
+.llm-input-with-button {
+  display: flex;
+  gap: 8px;
+}
+
+.llm-api-key-input {
+  flex: 1;
+}
+
+.llm-toggle-visibility-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 6px;
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.llm-toggle-visibility-btn:hover {
+  background-color: var(--jp-layout-color3);
+}
+
+.llm-settings-field input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--jp-layout-color3);
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.llm-settings-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--jp-brand-color1);
+  cursor: pointer;
+}
+
+.llm-settings-hint {
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+  margin: 6px 0 0 0;
+}
+
+.llm-settings-hint code {
+  background-color: var(--jp-layout-color3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: var(--jp-code-font-family);
+}
+
+.llm-settings-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.llm-settings-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--jp-brand-color1);
+  cursor: pointer;
+}
+
+.llm-api-key-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.llm-status-ok {
+  background-color: var(--jp-success-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-status-error {
+  background-color: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-test-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--jp-brand-color1);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.llm-test-btn:hover:not(:disabled) {
+  background-color: var(--jp-brand-color0);
+}
+
+.llm-test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.llm-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: llm-spin 0.8s linear infinite;
+}
+
+@keyframes llm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.llm-test-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.llm-test-success {
+  background-color: var(--jp-success-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-test-error {
+  background-color: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-settings-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 0 0 0;
+  border-top: 1px solid var(--jp-border-color0);
+  margin-top: 24px;
+}
+
+.llm-cancel-btn,
+.llm-save-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.llm-cancel-btn {
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-cancel-btn:hover {
+  background-color: var(--jp-layout-color3);
+}
+
+.llm-save-btn {
+  background-color: var(--jp-brand-color1);
+  color: white;
+}
+
+.llm-save-btn:hover:not(:disabled) {
+  background-color: var(--jp-brand-color0);
+}
+
+.llm-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.llm-value {
+  font-weight: 600;
+  color: var(--jp-brand-color1);
+}
+
+/* ==============================================================================
+   Markdown Content
+   ============================================================================== */
+
+.llm-markdown-content {
+  line-height: 1.6;
+}
+
+.llm-markdown-content *:first-child {
+  margin-top: 0;
+}
+
+.llm-markdown-content *:last-child {
+  margin-bottom: 0;
+}
+
+.llm-md-paragraph {
+  margin: 8px 0;
+}
+
+.llm-md-link {
+  color: var(--jp-link-color);
+  text-decoration: none;
+}
+
+.llm-md-link:hover {
+  text-decoration: underline;
+}
+
+.llm-md-code-inline {
+  font-family: var(--jp-code-font-family);
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background-color: var(--jp-layout-color3);
+  border-radius: 4px;
+  color: var(--jp-content-font-color1);
+}
+
+.llm-message-item.user .llm-md-code-inline {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: inherit;
+}
+
+.llm-md-list {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.llm-md-list-ordered {
+  list-style-type: decimal;
+}
+
+.llm-md-list-item {
+  margin: 4px 0;
+}
+
+.llm-md-heading {
+  font-weight: 600;
+  margin: 16px 0 8px 0;
+  color: var(--jp-content-font-color0);
+}
+
+.llm-message-item.user .llm-md-heading {
+  color: inherit;
+}
+
+.llm-md-heading-1 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--jp-border-color1);
+  padding-bottom: 8px;
+}
+
+.llm-md-heading-2 {
+  font-size: 1.3em;
+}
+
+.llm-md-heading-3 {
+  font-size: 1.1em;
+}
+
+.llm-md-heading-4,
+.llm-md-heading-5,
+.llm-md-heading-6 {
+  font-size: 1em;
+}
+
+.llm-md-blockquote {
+  margin: 8px 0;
+  padding: 8px 16px;
+  border-left: 4px solid var(--jp-brand-color1);
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-md-table-wrapper {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.llm-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.llm-md-th,
+.llm-md-td {
+  padding: 8px 12px;
+  border: 1px solid var(--jp-border-color1);
+  text-align: left;
+}
+
+.llm-md-th {
+  background-color: var(--jp-layout-color2);
+  font-weight: 600;
+}
+
+/* ==============================================================================
+   Code Block
+   ============================================================================== */
+
+.llm-code-block {
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--jp-cell-editor-background);
+  border: 1px solid var(--jp-border-color1);
+}
+
+.llm-code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--jp-layout-color2);
+  border-bottom: 1px solid var(--jp-border-color1);
+}
+
+.llm-code-language {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-code-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--jp-ui-font-color2);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.llm-code-copy-btn:hover {
+  background-color: var(--jp-layout-color3);
+  color: var(--jp-ui-font-color0);
+}
+
+.llm-code-copy-btn.copied {
+  color: var(--jp-success-color1);
+}
+
+.llm-code-block pre {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--jp-code-font-family);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.llm-code-block code {
+  font-family: var(--jp-code-font-family);
+}
+
+/* ==============================================================================
+   Image in Message
+   ============================================================================== */
+
+.llm-message-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+/* ==============================================================================
+   Scrollbar Styling
+   ============================================================================== */
+
+.llm-chat-panel ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.llm-chat-panel ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.llm-chat-panel ::-webkit-scrollbar-thumb {
+  background: var(--jp-scrollbar-thumb-color);
+  border-radius: 4px;
+}
+
+.llm-chat-panel ::-webkit-scrollbar-thumb:hover {
+  background: var(--jp-scrollbar-thumb-hover-color);
+}
+
+/* ==============================================================================
+   Responsive Adjustments
+   ============================================================================== */
+
+@media (max-width: 400px) {
+  .llm-message-content {
+    max-width: calc(100% - 48px);
+  }
+
+  .llm-message-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .llm-input-area {
+    padding: 8px 12px;
+  }
+}

@@ -1,0 +1,43 @@
+/**
+ * JupyterLab LLM Assistant Extension Styles
+ *
+ * This file imports all component styles.
+ */
+
+/* Import base styles */
+@import './chat.css';
+
+/* Variables */
+:root {
+  --llm-primary-color: #1976d2;
+  --llm-primary-hover: #1565c0;
+  --llm-bg-color: var(--jp-layout-color1);
+  --llm-text-color: var(--jp-content-font-color1);
+  --llm-border-color: var(--jp-border-color1);
+  --llm-user-bg: #e3f2fd;
+  --llm-assistant-bg: var(--jp-layout-color2);
+  --llm-code-bg: var(--jp-layout-color3);
+  --llm-success-color: #4caf50;
+  --llm-error-color: #f44336;
+  --llm-warning-color: #ff9800;
+}
+
+/* Dark theme adjustments */
+body[data-jp-theme-light='false'] {
+  --llm-user-bg: #1e3a5f;
+}
+
+/* Main panel container */
+.llm-assistant-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--llm-bg-color);
+  color: var(--llm-text-color);
+}
+
+.llm-assistant-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}

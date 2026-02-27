@@ -1,0 +1,7 @@
+{
+  "packageManager": "jupyterlab-llm-assistant",
+  "packageName": "jupyterlab-llm-assistant",
+  "packageVersion": "0.1.0",
+  "extension": true,
+  "packageType": "prebuilt"
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM Assistant Settings",
+  "description": "Settings for the JupyterLab LLM Assistant extension",
+  "type": "object",
+  "properties": {
+    "apiEndpoint": {
+      "type": "string",
+      "title": "API Endpoint",
+      "description": "The OpenAI-compatible API endpoint URL",
+      "default": "https://api.openai.com/v1"
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "The model to use for completions",
+      "default": "gpt-4o",
+      "enum": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]
+    },
+    "temperature": {
+      "type": "number",
+      "title": "Temperature",
+      "description": "Controls randomness in the output (0.0 - 2.0)",
+      "default": 0.7,
+      "minimum": 0,
+      "maximum": 2
+    },
+    "maxTokens": {
+      "type": "integer",
+      "title": "Max Tokens",
+      "description": "Maximum number of tokens to generate",
+      "default": 4096,
+      "minimum": 1,
+      "maximum": 128000
+    },
+    "systemPrompt": {
+      "type": "string",
+      "title": "System Prompt",
+      "description": "System prompt to set the behavior of the assistant",
+      "default": "You are a helpful AI coding assistant. Help users with programming questions, explain code, debug issues, and provide code examples. Be concise and accurate."
+    },
+    "enableStreaming": {
+      "type": "boolean",
+      "title": "Enable Streaming",
+      "description": "Enable streaming responses for real-time output",
+      "default": true
+    },
+    "enableVision": {
+      "type": "boolean",
+      "title": "Enable Vision",
+      "description": "Enable image input for vision-capable models",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}
