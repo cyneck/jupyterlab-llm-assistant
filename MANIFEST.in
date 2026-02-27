@@ -1,0 +1,17 @@
+include *.md
+include LICENSE
+include pyproject.toml
+include package.json
+include yarn.lock
+include tsconfig.json
+recursive-include jupyterlab_llm_assistant *.py
+recursive-include jupyterlab_llm_assistant labextension
+recursive-include schema *.json
+recursive-include style *.css
+recursive-include src *.ts *.tsx
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude node_modules
+recursive-exclude .git
+recursive-exclude dist
+recursive-exclude lib
