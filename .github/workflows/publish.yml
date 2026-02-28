@@ -45,9 +45,17 @@ jobs:
         run: |
           yarn build:prod
 
+      - name: Clean dist
+        run: |
+          rm -rf dist/
+
       - name: Build package
         run: |
           python -m build
+
+      - name: List dist contents
+        run: |
+          ls -la dist/
 
       - name: Get version
         id: version
