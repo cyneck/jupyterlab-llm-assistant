@@ -30,18 +30,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]"
           pip install build
+          pip install jupyterlab
 
       - name: Install Node.js dependencies
         run: |
-          yarn install
+          jlpm install
 
       - name: Lint
         run: |
-          yarn lint || true
+          jlpm run lint || true
 
       - name: Build the extension
         run: |
-          yarn build
+          jlpm run build:prod
 
       - name: Build package
         run: |

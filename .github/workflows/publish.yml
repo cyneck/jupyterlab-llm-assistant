@@ -36,14 +36,15 @@ jobs:
           pip install -e ".[test]"
           pip install build
           pip install jupyter-releaser
+          pip install jupyterlab
 
       - name: Install Node.js dependencies
         run: |
-          yarn install
+          jlpm install
 
       - name: Build the extension
         run: |
-          yarn build:prod
+          jlpm run build:prod
 
       - name: Clean dist
         run: |
