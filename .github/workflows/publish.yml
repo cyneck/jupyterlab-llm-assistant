@@ -1,6 +1,8 @@
 name: Publish to PyPI
 
 on:
+  push:
+    branches: [main, master]
   release:
     types: [published]
   workflow_dispatch:
@@ -70,6 +72,7 @@ jobs:
   publish-pypi:
     needs: build
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Download artifacts
