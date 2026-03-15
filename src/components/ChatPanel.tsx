@@ -1,13 +1,15 @@
 /**
  * Main panel component — three modes in one unified shell.
  *
- * Mode selector (Chat | Agent | Plan) lives in the header.
+ * Mode selector (Chat | Agent | Plan) lives in the **InputArea** footer
+ * dropdown, keeping the header clean for utility buttons.
  * Memory and Context-file panels are shared across all modes.
  *
- * v0.5.0 changes:
- * - Chat mode merged into this file (no longer a separate ChatPanel shell)
- * - Agent mode rendered via AgentPanel
- * - Plan mode rendered via PlanPanel (new)
+ * v0.6.0 changes:
+ * - Moved mode selector from header buttons → InputArea dropdown
+ * - InputArea now owns mode + onModeChange props
+ * - @ file-reference support in InputArea
+ * - Skill system TODO added (see bottom of file)
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -153,35 +155,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   const contextFileCount = contextState?.selectedPaths.length ?? 0;
 
   // ── Header (defined before return to follow React best practices) ──────────
+  // NOTE: Mode selector moved to InputArea footer dropdown (v0.6.0)
   const header = (
     <div className="llm-chat-header">
       <h3>LLM Assistant</h3>
       <div className="llm-header-actions">
-        {/* Mode toggle: Chat | Agent | Plan */}
-        <div className="llm-mode-toggle">
-          <button
-            className={`llm-mode-btn ${mode === 'chat' ? 'active' : ''}`}
-            onClick={() => handleModeChange('chat')}
-            title="Chat mode — direct conversation"
-          >
-            Chat
-          </button>
-          <button
-            className={`llm-mode-btn ${mode === 'agent' ? 'active' : ''}`}
-            onClick={() => handleModeChange('agent')}
-            title="Agent mode — can read/write files and run commands"
-          >
-            Agent
-          </button>
-          <button
-            className={`llm-mode-btn ${mode === 'plan' ? 'active' : ''}`}
-            onClick={() => handleModeChange('plan')}
-            title="Plan mode — generate a step-by-step plan, then execute"
-          >
-            Plan
-          </button>
-        </div>
-
         {/* Memory button */}
         <button
           className={`llm-header-btn ${showMemory ? 'active' : ''}`}
@@ -282,6 +260,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
           settings={currentSettings}
           contextText={contextText}
           contextFileCount={contextFileCount}
+          mode={mode}
+          onModeChange={handleModeChange}
         />
       )}
 
@@ -290,6 +270,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
           settings={currentSettings}
           contextText={contextText}
           contextFileCount={contextFileCount}
+          mode={mode}
+          onModeChange={handleModeChange}
         />
       )}
 
@@ -324,6 +306,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
             onSend={handleSend}
             disabled={isLoading || !(currentSettings.hasApiKey || (currentSettings.apiKey && currentSettings.apiKey.length > 0))}
             enableVision={currentSettings.enableVision}
+            mode={mode}
+            onModeChange={handleModeChange}
           />
         </>
       )}
@@ -332,3 +316,33 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
 };
 
 export default ChatPanel;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TODO: Skill System (future feature)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Planned implementation inspired by Claude Code's skill / tool registry:
+//
+// 1. Skill Registry Panel (new component: SkillsPanel.tsx)
+//    - Fetches the official Claude Code skill repository index from:
+//      https://github.com/anthropics/claude-code/tree/main/skills  (or similar)
+//    - Displays a marketplace-style list: name, description, author, install button
+//    - Installed skills persisted in ~/.jupyter/llm_assistant_skills.json
+//
+// 2. Backend endpoint (skill_handler.py)
+//    POST /llm-assistant/skills/install   { name, url }  → clone / fetch YAML
+//    GET  /llm-assistant/skills           → list installed skills
+//    DELETE /llm-assistant/skills/:name   → remove
+//
+// 3. Skill execution
+//    - Each skill is a YAML manifest: { name, description, tools: [...], prompt: "..." }
+//    - On "use skill X" command in chat/agent, inject the skill's system-prompt fragment
+//      and register its custom tools with the agent_loop before the run starts.
+//    - Skills can extend the tool registry with arbitrary Python callables (sandboxed).
+//
+// 4. UI entry point
+//    - New header button "Skills" (⚡ icon) opens SkillsPanel overlay.
+//    - In the @ mention menu, skills appear as a special category: @skill:<name>
+//
+// ─────────────────────────────────────────────────────────────────────────────
+

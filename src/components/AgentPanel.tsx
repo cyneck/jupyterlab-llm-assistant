@@ -19,6 +19,7 @@ import { LLMSettings, AgentDisplayMessage, ToolCallEntry } from '../models/types
 import { LLMApiService } from '../services/api';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolCallDisplay } from './ToolCallDisplay';
+import type { AppMode } from './ChatPanel';
 
 export interface AgentPanelProps {
   settings: LLMSettings;
@@ -26,6 +27,10 @@ export interface AgentPanelProps {
   contextText?: string;
   /** Number of selected context files (for display) */
   contextFileCount?: number;
+  /** Current app mode — passed down so the mode selector stays in sync */
+  mode?: AppMode;
+  /** Called when user switches mode via the selector */
+  onModeChange?: (mode: AppMode) => void;
 }
 
 // ─── Persistence helpers ──────────────────────────────────────────────────────
@@ -100,7 +105,13 @@ function uid(): string {
 /**
  * AgentPanel — the main coding agent UI
  */
-export const AgentPanel: React.FC<AgentPanelProps> = ({ settings, contextText, contextFileCount = 0 }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({
+  settings,
+  contextText,
+  contextFileCount = 0,
+  mode = 'agent',
+  onModeChange,
+}) => {
   const [messages, setMessages] = useState<AgentDisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -639,7 +650,37 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings, contextText, c
           )}
         </div>
         <div className="agent-input-hint">
-          <span>Enter to send · Shift+Enter for newline</span>
+          <div className="llm-mode-selector">
+            <svg
+              className="llm-mode-selector-icon"
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="currentColor"
+            >
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-8v4h4l-5 8z" />
+            </svg>
+            <select
+              className="llm-mode-select"
+              value={mode}
+              onChange={e => onModeChange?.(e.target.value as AppMode)}
+              disabled={isRunning}
+              title="Switch mode"
+            >
+              <option value="chat">Chat — direct conversation</option>
+              <option value="agent">Agent — reads/writes files &amp; runs commands</option>
+              <option value="plan">Plan — generate a plan, then execute step by step</option>
+            </select>
+            <svg
+              className="llm-mode-select-chevron"
+              viewBox="0 0 24 24"
+              width="12"
+              height="12"
+              fill="currentColor"
+            >
+              <path d="M7 10l5 5 5-5z" />
+            </svg>
+          </div>
           <div className="agent-input-hint-right">
             {contextFileCount > 0 && (
               <span className="agent-cwd-label" title={`${contextFileCount} context file(s) active`}>
