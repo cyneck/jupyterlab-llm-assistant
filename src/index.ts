@@ -27,6 +27,7 @@ const PLUGIN_ID = 'jupyterlab-llm-assistant:plugin';
 namespace CommandIDs {
   export const openAssistant = 'llm-assistant:open';
   export const clearChat = 'llm-assistant:clear';
+  export const openAgent = 'llm-assistant:open-agent';
 }
 
 /**
@@ -113,10 +114,21 @@ async function activatePlugin(
     },
   });
 
+  app.commands.addCommand(CommandIDs.openAgent, {
+    label: 'Open Coding Agent',
+    execute: () => {
+      app.shell.activateById(panel.id);
+    },
+  });
+
   // Add to command palette
   if (palette) {
     palette.addItem({
       command: CommandIDs.openAssistant,
+      category: 'LLM Assistant',
+    });
+    palette.addItem({
+      command: CommandIDs.openAgent,
       category: 'LLM Assistant',
     });
   }

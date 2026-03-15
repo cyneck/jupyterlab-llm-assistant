@@ -1,5 +1,7 @@
 # 手工构建与发布指南
 
+> 本文档适用于 v0.2.0 及以上版本，包含 Coding Agent 后端模块的构建说明。
+
 ## GitHub Actions 自动构建
 
 项目配置了 GitHub Actions 自动化工作流，位于 `.github/workflows/` 目录。
@@ -31,11 +33,11 @@ GitHub 提供的免费托管虚拟机：
 1. Checkout（拉取代码）
 2. Setup Python 3.11
 3. Setup Node.js 20
-4. 安装 Python 依赖（pip install jupyterlab 等）
-5. 安装 Node.js 依赖（jlpm install）
+4. 安装 Python 依赖（`pip install jupyterlab` 等，含 `agent_handler`、`agent_tools` 依赖）
+5. 安装 Node.js 依赖（`jlpm install`）
 6. Lint 代码检查
-7. 前端构建（jlpm run build:prod）
-8. Python 包构建（python -m build）
+7. 前端构建（`jlpm run build:prod`，含 `AgentPanel`、`ToolCallDisplay` 组件）
+8. Python 包构建（`python -m build`）
 9. 验证安装
 10. Upload artifacts（上传 dist/ 目录）
 
@@ -129,13 +131,25 @@ jupyter-releaser publish
 
 ## 版本管理
 
-发布前请更新版本号：
+发布前请更新版本号（当前：v0.2.0）：
 
 ```bash
 # 更新 package.json 中的版本
 # 然后同步到 Python 包
 python -c "import json; v = json.load(open('package.json'))['version']; open('jupyterlab_llm_assistant/_version.py', 'w').write(f'__version__ = \"{v}\"\n')"
 ```
+
+## 新模块说明（v0.2.0）
+
+v0.2.0 新增以下文件，构建时会自动包含在 wheel 包中：
+
+| 文件 | 说明 |
+|------|------|
+| `jupyterlab_llm_assistant/agent_handler.py` | Agent ReAct 循环主逻辑，处理 `/llm-assistant/agent` 路由 |
+| `jupyterlab_llm_assistant/agent_tools.py` | 5 个 Agent 工具实现（read_file/write_file/list_dir/bash/grep_search） |
+| `src/components/AgentPanel.tsx` | Agent 模式前端面板组件 |
+| `src/components/ToolCallDisplay.tsx` | 工具调用可视化展示组件 |
+| `style/agent.css` | Agent 面板专用样式 |
 
 ## 故障排除
 

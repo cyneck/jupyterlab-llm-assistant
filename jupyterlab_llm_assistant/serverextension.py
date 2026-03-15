@@ -2,24 +2,79 @@
 Server extension for JupyterLab LLM Assistant.
 
 This module provides the entry point for the Jupyter Server extension.
+Configuration is persisted to ~/.jupyter/llm_assistant_config.json so that
+settings (API endpoint, model, etc.) survive JupyterLab restarts.
 """
 
+import json
+import os
 from typing import Dict, Any
 from .handlers import setup_handlers
 from ._version import __version__
 
 
-# Global configuration store
-_config_store: Dict[str, Any] = {
+# ─── Persistence helpers ──────────────────────────────────────────────────────
+
+_CONFIG_FILE = os.path.expanduser("~/.jupyter/llm_assistant_config.json")
+
+_DEFAULT_CONFIG: Dict[str, Any] = {
     "apiEndpoint": "https://api.openai.com/v1",
     "model": "gpt-4o",
     "temperature": 0.7,
     "maxTokens": 4096,
-    "systemPrompt": "You are a helpful AI coding assistant. Help users with programming questions, explain code, debug issues, and provide code examples. Be concise and accurate.",
+    "systemPrompt": (
+        "You are a helpful AI coding assistant. Help users with programming questions, "
+        "explain code, debug issues, and provide code examples. Be concise and accurate."
+    ),
     "enableStreaming": True,
     "enableVision": True,
 }
 
+
+def _load_config() -> Dict[str, Any]:
+    """Load persisted config from disk, merging with defaults."""
+    config = dict(_DEFAULT_CONFIG)
+    try:
+        if os.path.exists(_CONFIG_FILE):
+            with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            # Only overlay keys we know about (ignore stale/unknown keys)
+            for key in _DEFAULT_CONFIG:
+                if key in saved:
+                    config[key] = saved[key]
+            # Preserve API key if saved
+            if "apiKey" in saved:
+                config["apiKey"] = saved["apiKey"]
+    except Exception:
+        pass  # Fall back to defaults silently
+    return config
+
+
+def _save_config(config: Dict[str, Any]) -> None:
+    """Persist config to disk (non-blocking best-effort)."""
+    try:
+        os.makedirs(os.path.dirname(_CONFIG_FILE), exist_ok=True)
+        # Never persist the raw API key to disk for security.
+        # Users should rely on OPENAI_API_KEY env var for that.
+        safe = {k: v for k, v in config.items() if k != "apiKey"}
+        # But do persist a flag that an API key was set in memory so the UI
+        # can show "key configured" after restart (user must re-enter key each session).
+        with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(safe, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass  # Non-fatal — just skip persistence
+
+
+# ─── Global config store ──────────────────────────────────────────────────────
+
+# Loaded once at import time.  Handlers mutate this dict in-place.
+_config_store: Dict[str, Any] = _load_config()
+
+# Attach save callback so ConfigHandler can trigger disk persistence
+_config_store["_save_callback"] = _save_config
+
+
+# ─── Extension entry points ───────────────────────────────────────────────────
 
 def load_jupyter_server_extension(server_app):
     """
@@ -29,10 +84,7 @@ def load_jupyter_server_extension(server_app):
         server_app: The JupyterServer application instance
     """
     server_app.log.info(f"Loading JupyterLab LLM Assistant extension v{__version__}")
-
-    # Set up handlers
     setup_handlers(server_app.web_app, _config_store)
-
     server_app.log.info("JupyterLab LLM Assistant extension loaded successfully")
 
 

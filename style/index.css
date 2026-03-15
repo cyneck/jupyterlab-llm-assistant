@@ -6,6 +6,7 @@
 
 /* Import base styles */
 @import './chat.css';
+@import './agent.css';
 
 /* Variables */
 :root {

@@ -8,12 +8,11 @@ import json
 import asyncio
 from typing import Dict, Any, Optional, List
 from tornado import web
-from tornado.web import RequestHandler, stream_request_body
-from tornado.iostream import IOStream
-from jupyter_server.base.handlers import JupyterHandler, APIHandler
-from jupyter_server.utils import url_path_join, ensure_async
+from jupyter_server.base.handlers import APIHandler
+from jupyter_server.utils import url_path_join
 
 from .llm_client import LLMClient, LLMConfig
+from .agent_handler import AgentHandler
 
 
 class ConfigHandler(APIHandler):
@@ -28,11 +27,9 @@ class ConfigHandler(APIHandler):
         """Initialize with config store."""
         self.config_store = config_store
 
-    @web.authenticated
-    async def get(self):
-        """Get current configuration (excluding sensitive data)."""
-        # Return config without sensitive data
-        safe_config = {
+    def _build_safe_config(self) -> dict:
+        """Build safe config dict excluding sensitive data."""
+        return {
             "apiEndpoint": self.config_store.get("apiEndpoint", "https://api.openai.com/v1"),
             "apiKey": "",  # Never return actual API key
             "model": self.config_store.get("model", "gpt-4o"),
@@ -43,7 +40,11 @@ class ConfigHandler(APIHandler):
             "enableVision": self.config_store.get("enableVision", True),
             "hasApiKey": bool(self._get_api_key()),
         }
-        self.finish(json.dumps(safe_config))
+
+    @web.authenticated
+    async def get(self):
+        """Get current configuration (excluding sensitive data)."""
+        self.finish(json.dumps(self._build_safe_config()))
 
     @web.authenticated
     async def post(self):
@@ -67,7 +68,13 @@ class ConfigHandler(APIHandler):
         if "apiKey" in data and data["apiKey"]:
             self.config_store["apiKey"] = data["apiKey"]
 
-        await self.get()
+        # Persist configuration to disk (non-blocking, best-effort)
+        save_cb = self.config_store.get("_save_callback")
+        if callable(save_cb):
+            save_cb(self.config_store)
+
+        # Fix: do NOT call await self.get() — build response directly
+        self.finish(json.dumps(self._build_safe_config()))
 
     def _get_api_key(self) -> Optional[str]:
         """Get API key from config store or environment variable."""
@@ -254,6 +261,11 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
         (url_path_join(base_url, "/llm-assistant/models"), ModelsHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/test"), TestConnectionHandler, {"config_store": config_store}),
     ]
+
+    # Add agent route
+    routes.append(
+        (url_path_join(base_url, "/llm-assistant/agent"), AgentHandler, {"config_store": config_store}),
+    )
 
     for route_pattern, handler, handler_args in routes:
         web_app.add_handlers(host_pattern, [(route_pattern, handler, handler_args)])

@@ -2,6 +2,7 @@
  * API service for communicating with the backend.
  */
 
+import { PageConfig } from '@jupyterlab/coreutils';
 import { LLMSettings, ChatResponse, ConnectionTestResult, ModelsResponse, MessageRole, MessageContent } from '../models/types';
 
 /**
@@ -31,9 +32,12 @@ export class LLMApiService {
   private baseUrl: string;
 
   constructor() {
-    // Get base URL from JupyterLab's base URL
-    const baseUrl = (window as any).__jupyter_server_root_url || '';
-    this.baseUrl = `${baseUrl}llm-assistant`;
+    // PageConfig.getOption('baseUrl') reads the raw 'baseUrl' value injected by
+    // the Jupyter server into the page (e.g. "/" or "/jupyter/").
+    // This is the server root, NOT the app UI route (which would include /lab/tree/).
+    // Using getBaseUrl() or window.__jupyter_server_root_url can return wrong paths.
+    const serverRoot = PageConfig.getOption('baseUrl') || '/';
+    this.baseUrl = serverRoot.replace(/\/$/, '') + '/llm-assistant';
   }
 
   /**
@@ -210,5 +214,78 @@ export class LLMApiService {
     }
 
     return response.json();
+  }
+
+  /**
+   * Run the coding agent with streaming SSE
+   *
+   * Events are streamed as: data: {"type": "...", "data": {...}}
+   *
+   * @param messages  Conversation history (user/assistant turns)
+   * @param onEvent   Callback for each parsed SSE event
+   * @param rootDir   Optional working directory for file tools
+   */
+  async runAgent(
+    messages: Array<{ role: string; content: string }>,
+    onEvent: (event: { type: string; data: any }) => void,
+    rootDir?: string,
+    settings?: LLMSettings,
+    maxIterations?: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/agent`, {
+      method: 'POST',
+      headers: getHeaders(),
+      signal,
+      body: JSON.stringify({
+        messages,
+        rootDir,
+        maxIterations: maxIterations ?? 20,
+        ...settings && {
+          model: settings.model,
+          temperature: settings.temperature,
+          maxTokens: settings.maxTokens,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(error.error || `Agent request failed: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') return;
+            try {
+              const event = JSON.parse(raw);
+              onEvent(event);
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 }

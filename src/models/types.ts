@@ -200,3 +200,83 @@ export interface CodeBlockProps {
   code: string;
   language: string;
 }
+
+// ============================================================
+// Agent types
+// ============================================================
+
+/**
+ * Agent tool call event from SSE
+ */
+export interface AgentToolCall {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+}
+
+/**
+ * Agent tool result event from SSE
+ */
+export interface AgentToolResult {
+  id: string;
+  name: string;
+  success: boolean;
+  output: string;
+}
+
+/**
+ * Agent SSE event types
+ */
+export type AgentEventType =
+  | 'text'
+  | 'tool_call'
+  | 'tool_result'
+  | 'iteration'
+  | 'done'
+  | 'error';
+
+/**
+ * Agent SSE event payload
+ */
+export interface AgentEvent {
+  type: AgentEventType;
+  data: any;
+}
+
+/**
+ * Tool call display state (for UI — tracks call + result together)
+ */
+export interface ToolCallEntry {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+  result?: AgentToolResult;
+  status: 'pending' | 'running' | 'success' | 'error';
+  startTime: number;
+  endTime?: number;
+}
+
+/**
+ * Agent message types for the chat UI
+ */
+export type AgentMessageType = 'user' | 'agent_text' | 'tool_call' | 'system';
+
+/**
+ * An entry in the Agent conversation display
+ */
+export interface AgentDisplayMessage {
+  id: string;
+  type: AgentMessageType;
+  content?: string;
+  toolCall?: ToolCallEntry;
+  timestamp: number;
+  isStreaming?: boolean;
+  iteration?: number;
+}
+
+/**
+ * Agent panel props
+ */
+export interface AgentPanelProps {
+  settings: LLMSettings;
+}
