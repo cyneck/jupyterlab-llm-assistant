@@ -28,6 +28,7 @@ dependencies = [
     "openai>=1.0.0",
     "tornado>=6.0",
     "pydantic>=2.0.0",
+    "pyyaml>=6.0",
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 

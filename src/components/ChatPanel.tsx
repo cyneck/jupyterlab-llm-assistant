@@ -134,12 +134,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       chatModelRef.current.errorChanged.connect((_, err) => setError(err));
     }
 
-    // Fetch the server's cwd for @ mention root
-    _api.getConfig().then(() => {
-      // rootDir is the server cwd — approximate via a known endpoint
-      // We just use '' which signals the backend to use os.getcwd()
+    // Fetch the server's cwd for @ mention root via workspace info
+    _api.getWorkspaceInfo('').then(info => {
+      setRootDir(info.rootDir || '');
+    }).catch(() => {
+      // Fallback: empty string means backend uses os.getcwd()
       setRootDir('');
-    }).catch(() => {});
+    });
   }, []);
 
   useEffect(() => {

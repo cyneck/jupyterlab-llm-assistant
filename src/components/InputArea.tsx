@@ -639,12 +639,22 @@ export const InputArea: React.FC<InputAreaProps> = ({
               if (!files) return;
               for (const f of Array.from(files)) {
                 if (f.type.startsWith('image/')) {
+                  // Images → inline preview
                   const dataUrl = await new Promise<string>(resolve => {
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result as string);
                     reader.readAsDataURL(f);
                   });
                   setImages(prev => [...prev, { id: genId(), dataUrl, file: f, preview: dataUrl }]);
+                } else {
+                  // Non-image files → attach as a path chip using the file name
+                  // (browser File objects don't expose the full server path, so we
+                  // attach by name; the @ picker is preferred for server-side paths)
+                  const chipPath = f.name;
+                  setAttachedPaths(prev => {
+                    if (prev.find(a => a.path === chipPath)) return prev;
+                    return [...prev, { id: genId(), path: chipPath, isDir: false }];
+                  });
                 }
               }
               if (fileInputRef.current) fileInputRef.current.value = '';
