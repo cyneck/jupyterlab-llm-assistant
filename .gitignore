@@ -1,1 +1,28 @@
-node_modules
+# --- Dependencies ---
+node_modules/
+.yarn/
+
+# --- Python build & cache ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# --- TypeScript / JS build output ---
+lib/
+jupyterlab_llm_assistant/labextension/static/
+jupyterlab_llm_assistant/labextension/build_log.json
+jupyterlab_llm_assistant/labextension/package.json
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*.ipynb
+
+# --- Misc ---
+.DS_Store
+.env
+*.log
+hello.py
