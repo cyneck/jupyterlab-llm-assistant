@@ -1,15 +1,16 @@
 /**
- * Main panel component — three modes in one unified shell.
+ * ChatPanel — Unified shell for Chat / Agent / Plan modes.
  *
- * Mode selector (Chat | Agent | Plan) lives in the **InputArea** footer
- * dropdown, keeping the header clean for utility buttons.
- * Memory and Context-file panels are shared across all modes.
- *
- * v0.6.0 changes:
- * - Moved mode selector from header buttons → InputArea dropdown
- * - InputArea now owns mode + onModeChange props
- * - @ file-reference support in InputArea
- * - Skill system TODO added (see bottom of file)
+ * v0.7.0 redesign:
+ * - All three modes share a SINGLE unified context: the InputArea at the
+ *   bottom is always visible regardless of mode.  Switching mode just changes
+ *   the message-display viewport above — no page navigation required.
+ * - ContextFilePanel removed; file/dir references are handled inline via the
+ *   @ mention picker and path chips in InputArea.
+ * - Attached paths (from @ picker) are forwarded to the active mode handler
+ *   which reads the file contents before sending to the LLM.
+ * - .llm-assistant workspace directory support added (session history,
+ *   ASSISTANT.md, per-project config, future skill loading).
  */
 import React from 'react';
 import { LLMSettings } from '../models/types';

@@ -86,6 +86,17 @@ export declare class LLMApiService {
         totalFound: number;
     }>;
     /**
+     * List the immediate children of a directory (one level only).
+     * Returns both files and subdirectories.
+     */
+    listDirContents(dirPath: string, rootDir?: string): Promise<{
+        entries: Array<{
+            name: string;
+            path: string;
+            isDir: boolean;
+        }>;
+    }>;
+    /**
      * Read one or more files and return their contents
      */
     readContextFiles(paths: string[], rootDir?: string): Promise<{
@@ -110,6 +121,53 @@ export declare class LLMApiService {
         type: string;
         data: any;
     }) => void, rootDir?: string, contextText?: string, settings?: LLMSettings, signal?: AbortSignal): Promise<void>;
+    /** Get workspace info for the current project */
+    getWorkspaceInfo(rootDir?: string): Promise<{
+        rootDir: string;
+        workspaceDir: string;
+        hasAssistantMd: boolean;
+        sessionCount: number;
+        skillCount: number;
+        exists: boolean;
+    }>;
+    /** Get ASSISTANT.md content */
+    getAssistantMd(rootDir?: string): Promise<{
+        content: string;
+        path: string;
+        exists: boolean;
+        defaultContent: string;
+    }>;
+    /** Save ASSISTANT.md content */
+    saveAssistantMd(content: string, rootDir?: string): Promise<void>;
+    /** List saved sessions */
+    listSessions(rootDir?: string): Promise<Array<{
+        id: string;
+        summary: string;
+        savedAt: number;
+        mode: string;
+        messageCount: number;
+    }>>;
+    /** Save a session */
+    saveSession(session: {
+        id?: string;
+        summary: string;
+        mode: string;
+        messages: any[];
+        history: any[];
+        rootDir?: string;
+    }): Promise<{
+        id: string;
+    }>;
+    /** Delete a session */
+    deleteSession(id: string, rootDir?: string): Promise<void>;
+    /** List installed skills */
+    listSkills(rootDir?: string): Promise<Array<{
+        name: string;
+        description: string;
+        version: string;
+        enabled: boolean;
+        type: string;
+    }>>;
     /** Internal SSE stream reader */
     private _readSSEStream;
 }

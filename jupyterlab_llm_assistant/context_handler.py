@@ -225,6 +225,84 @@ class ContextResolveHandler(APIHandler):
         }))
 
 
+class ContextListDirHandler(APIHandler):
+    """
+    POST /llm-assistant/context/listdir
+
+    List immediate children (one level) of a directory.
+    Returns both files and subdirectories so the frontend can
+    render a drill-down tree for the @ mention picker.
+
+    Request body:
+    {
+        "path": "src",              // relative or absolute path to a directory
+        "rootDir": "/optional/root"
+    }
+
+    Response:
+    {
+        "entries": [
+            {"name": "index.ts",  "path": "src/index.ts",  "isDir": false},
+            {"name": "components","path": "src/components","isDir": true},
+            ...
+        ]
+    }
+    """
+
+    SKIP_NAMES = frozenset([
+        "node_modules", "__pycache__", ".git", "dist", "build",
+        "lib", ".venv", "venv", ".mypy_cache", ".pytest_cache",
+        "coverage", ".next", "out",
+    ])
+
+    @web.authenticated
+    async def post(self):
+        try:
+            body = json.loads(self.request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            raise web.HTTPError(400, "Invalid JSON")
+
+        path: str = body.get("path", ".")
+        root_dir: str = body.get("rootDir") or os.getcwd()
+
+        resolved = _resolve(path, root_dir)
+
+        if not os.path.exists(resolved):
+            raise web.HTTPError(404, f"Path not found: {path}")
+
+        entries = []
+
+        if os.path.isfile(resolved):
+            # Single file — return it as the only entry
+            try:
+                rel = os.path.relpath(resolved, root_dir)
+            except ValueError:
+                rel = resolved
+            entries = [{"name": os.path.basename(resolved), "path": rel, "isDir": False}]
+
+        elif os.path.isdir(resolved):
+            try:
+                names = sorted(os.listdir(resolved))
+            except PermissionError:
+                names = []
+
+            for name in names:
+                if name.startswith(".") or name in self.SKIP_NAMES:
+                    continue
+                full = os.path.join(resolved, name)
+                try:
+                    rel = os.path.relpath(full, root_dir)
+                except ValueError:
+                    rel = full
+                entries.append({
+                    "name": name,
+                    "path": rel,
+                    "isDir": os.path.isdir(full),
+                })
+
+        self.finish(json.dumps({"entries": entries}))
+
+
 # ─── Helper ───────────────────────────────────────────────────────────────────
 
 def _resolve(path: str, root_dir: str) -> str:

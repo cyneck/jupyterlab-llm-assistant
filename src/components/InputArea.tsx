@@ -1,10 +1,16 @@
 /**
- * Input area component for chat / agent / plan messages.
+ * InputArea — unified input block for Chat / Agent / Plan modes.
  *
- * v0.6.0 additions:
- * - Mode selector dropdown (Chat | Agent | Plan) below the textarea
- * - @ mention support: typing "@" opens a file/directory picker
- *   resolved from the current Jupyter working directory via the backend
+ * v0.7.0 changes:
+ * - Textarea grows from 120 px (min) to 400 px (max) — suitable for large inputs
+ * - Toolbar row: image attach button + file/dir attach button + send button
+ * - @ mention: now resolves BOTH files and directories;
+ *   selecting a directory opens it inline in the picker (drill-down)
+ * - Attachment chip list: selected @-referenced paths shown as dismissable chips
+ * - Ctrl+Enter or Cmd+Enter to send (Enter = newline by default at 3+ lines,
+ *   Enter still sends on single-line for quick use; configurable)
+ * - enableVision is now always true from InputArea perspective — the image
+ *   button is always shown (backend handles capability check)
  */
 
 import React, {
@@ -20,25 +26,29 @@ import type { AppMode } from './ChatPanel';
 
 // ── @ mention helpers ─────────────────────────────────────────────────────────
 
-/** One item in the @ picker list */
 interface FileSuggestion {
-  path: string;      // relative path shown to user
+  path: string;
   isDir: boolean;
-  label: string;     // basename for display
+  label: string;
 }
 
-// Singleton API service (shared with rest of app)
+/** A path chip that the user has explicitly confirmed via the @ picker */
+export interface AttachedPath {
+  id: string;
+  path: string;
+  isDir: boolean;
+}
+
 const _api = new LLMApiService();
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface InputAreaProps {
-  onSend: (text: string, images: ImageData[]) => void;
+  onSend: (text: string, images: ImageData[], attachedPaths: AttachedPath[]) => void;
   disabled: boolean;
-  enableVision: boolean;
-  /** Current mode — shown in the selector */
+  /** Still accepted so callers don't break, but image attach is always shown */
+  enableVision?: boolean;
   mode: AppMode;
-  /** Called when user picks a different mode */
   onModeChange: (mode: AppMode) => void;
   /** Working root dir for @ resolution (defaults to cwd on server) */
   rootDir?: string;
@@ -46,23 +56,19 @@ export interface InputAreaProps {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function generateId(): string {
+function genId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-/** Return the index of the last "@" in a string that starts a mention query. */
 function findAtTrigger(value: string, cursor: number): number {
-  // Only look in the text before the cursor
   const before = value.slice(0, cursor);
   const idx = before.lastIndexOf('@');
   if (idx === -1) return -1;
-  // If there is a whitespace right after "@" it is not a trigger
   const afterAt = before.slice(idx + 1);
   if (/\s/.test(afterAt)) return -1;
   return idx;
 }
 
-/** Extract the current query string after "@" */
 function getAtQuery(value: string, cursor: number, atIdx: number): string {
   return value.slice(atIdx + 1, cursor);
 }
@@ -72,83 +78,100 @@ function getAtQuery(value: string, cursor: number, atIdx: number): string {
 export const InputArea: React.FC<InputAreaProps> = ({
   onSend,
   disabled,
-  enableVision,
   mode,
   onModeChange,
   rootDir,
 }) => {
   const [text, setText] = useState('');
   const [images, setImages] = useState<ImageData[]>([]);
+  const [attachedPaths, setAttachedPaths] = useState<AttachedPath[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── @ mention state ──────────────────────────────────────────────────────
-  const [atIdx, setAtIdx] = useState<number>(-1);          // position of "@" in text
-  const [atQuery, setAtQuery] = useState<string>('');       // text typed after "@"
+  const [atIdx, setAtIdx] = useState<number>(-1);
+  const [atQuery, setAtQuery] = useState<string>('');
   const [suggestions, setSuggestions] = useState<FileSuggestion[]>([]);
-  const [suggestionIdx, setSuggestionIdx] = useState<number>(0);  // keyboard highlight
+  const [suggestionIdx, setSuggestionIdx] = useState<number>(0);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  /** Breadcrumb stack for directory drill-down */
+  const [browseDir, setBrowseDir] = useState<string>('');
   const mentionMenuRef = useRef<HTMLDivElement>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
 
-  // ── Auto-resize textarea ──────────────────────────────────────────────────
+  // ── Auto-resize textarea (min 120 px, max 400 px) ────────────────────────
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(
-        textareaRef.current.scrollHeight,
-        200
-      )}px`;
-    }
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const next = Math.max(120, Math.min(ta.scrollHeight, 400));
+    ta.style.height = `${next}px`;
   }, [text]);
 
-  // ── Fetch file suggestions when atQuery changes ───────────────────────────
+  // ── Fetch file/dir suggestions ─────────────────────────────────────────
   useEffect(() => {
     if (atIdx === -1) {
       setSuggestions([]);
       return;
     }
 
-    // Cancel previous request
     fetchAbortRef.current?.abort();
     fetchAbortRef.current = new AbortController();
 
     setLoadingSuggestions(true);
+
     const query = atQuery;
-    const root = rootDir || '';
+    const searchPath = browseDir || query || '.';
 
     const fetchSuggestions = async () => {
       try {
-        // Resolve the query as a path prefix — list the directory if it ends
-        // with "/" or enumerate files matching the prefix otherwise.
-        const searchPath = query || '.';
-        const result = await _api.resolveContextPath(searchPath, root);
+        const result = await _api.resolveContextPath(searchPath, rootDir || '');
 
-        const items: FileSuggestion[] = result.paths.slice(0, 20).map(p => ({
-          path: p,
-          isDir: false,
-          label: p.split('/').pop() || p,
-        }));
+        // Build suggestion list
+        const items: FileSuggestion[] = [];
 
-        // If no query, also add "." as a directory option
-        if (!query) {
-          items.unshift({ path: '.', isDir: true, label: '. (current dir)' });
+        if (result.isDir) {
+          // If the resolved path is a directory, list its immediate children
+          const childResult = await _api.listDirContents(searchPath, rootDir || '');
+          for (const item of childResult.entries.slice(0, 30)) {
+            items.push({
+              path: item.path,
+              isDir: item.isDir,
+              label: item.name,
+            });
+          }
+        } else {
+          // Files matching pattern
+          for (const p of result.paths.slice(0, 30)) {
+            items.push({
+              path: p,
+              isDir: false,
+              label: p.split('/').pop() || p,
+            });
+          }
         }
 
-        setSuggestions(items);
+        // Filter by query if we have one and didn't drill into a dir
+        const filtered = query && !browseDir
+          ? items.filter(i =>
+              i.label.toLowerCase().includes(query.toLowerCase()) ||
+              i.path.toLowerCase().includes(query.toLowerCase())
+            )
+          : items;
+
+        setSuggestions(filtered);
         setSuggestionIdx(0);
       } catch {
-        // If resolve fails, just show nothing
         setSuggestions([]);
       } finally {
         setLoadingSuggestions(false);
       }
     };
 
-    // Debounce 150 ms
     const timer = setTimeout(fetchSuggestions, 150);
     return () => clearTimeout(timer);
-  }, [atIdx, atQuery, rootDir]);
+  }, [atIdx, atQuery, browseDir, rootDir]);
 
   // ── Close @ menu on outside click ─────────────────────────────────────────
   useEffect(() => {
@@ -161,13 +184,14 @@ export const InputArea: React.FC<InputAreaProps> = ({
       ) {
         setAtIdx(-1);
         setSuggestions([]);
+        setBrowseDir('');
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [atIdx]);
 
-  // ── Handle text change — detect "@" trigger ───────────────────────────────
+  // ── Handle text change ────────────────────────────────────────────────────
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
@@ -179,41 +203,78 @@ export const InputArea: React.FC<InputAreaProps> = ({
         const q = getAtQuery(val, cursor, idx);
         setAtIdx(idx);
         setAtQuery(q);
+        // Reset drill-down when query changes
+        setBrowseDir('');
       } else {
         setAtIdx(-1);
         setAtQuery('');
         setSuggestions([]);
+        setBrowseDir('');
       }
     },
     []
   );
 
-  // ── Insert chosen file path into text ─────────────────────────────────────
+  // ── Select a suggestion ───────────────────────────────────────────────────
   const handleSelectSuggestion = useCallback(
     (suggestion: FileSuggestion) => {
       if (atIdx === -1) return;
+
+      if (suggestion.isDir) {
+        // Drill into directory — update browseDir, keep @ menu open
+        setBrowseDir(suggestion.path);
+        setSuggestions([]);
+        setSuggestionIdx(0);
+        textareaRef.current?.focus();
+        return;
+      }
+
+      // File selected: replace @query with chip, remove from text
       const cursor = textareaRef.current?.selectionStart ?? text.length;
       const before = text.slice(0, atIdx);
       const after = text.slice(cursor);
-      const inserted = `@${suggestion.path} `;
-      const newText = before + inserted + after;
+      // Remove the @query part from text — the path becomes a chip
+      const newText = before + after;
       setText(newText);
+
+      // Add chip
+      setAttachedPaths(prev => {
+        if (prev.find(a => a.path === suggestion.path)) return prev;
+        return [...prev, { id: genId(), path: suggestion.path, isDir: false }];
+      });
 
       // Reset mention state
       setAtIdx(-1);
       setAtQuery('');
       setSuggestions([]);
+      setBrowseDir('');
 
-      // Restore focus and position cursor after inserted text
       requestAnimationFrame(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
-          const newCursor = before.length + inserted.length;
+          const newCursor = before.length;
           textareaRef.current.setSelectionRange(newCursor, newCursor);
         }
       });
     },
     [atIdx, text]
+  );
+
+  // ── Attach a whole directory as a chip (from toolbar) ─────────────────────
+  const handleAttachDirAsChip = useCallback((suggestion: FileSuggestion) => {
+    setAttachedPaths(prev => {
+      if (prev.find(a => a.path === suggestion.path)) return prev;
+      return [...prev, { id: genId(), path: suggestion.path, isDir: suggestion.isDir }];
+    });
+    setAtIdx(-1);
+    setSuggestions([]);
+    setBrowseDir('');
+  }, []);
+
+  // ── Remove a path chip ────────────────────────────────────────────────────
+  const handleRemoveChip = useCallback(
+    (id: string) => setAttachedPaths(prev => prev.filter(a => a.id !== id)),
+    []
   );
 
   // ── Image handling ────────────────────────────────────────────────────────
@@ -230,17 +291,16 @@ export const InputArea: React.FC<InputAreaProps> = ({
           reader.onload = () => resolve(reader.result as string);
           reader.readAsDataURL(file);
         });
-        newImages.push({ id: generateId(), dataUrl, file, preview: dataUrl });
+        newImages.push({ id: genId(), dataUrl, file, preview: dataUrl });
       }
       setImages(prev => [...prev, ...newImages]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (imageInputRef.current) imageInputRef.current.value = '';
     },
     []
   );
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
-      if (!enableVision) return;
       const items = e.clipboardData.items;
       const newImages: ImageData[] = [];
       for (const item of Array.from(items)) {
@@ -252,11 +312,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
           reader.onload = () => resolve(reader.result as string);
           reader.readAsDataURL(file);
         });
-        newImages.push({ id: generateId(), dataUrl, file, preview: dataUrl });
+        newImages.push({ id: genId(), dataUrl, file, preview: dataUrl });
       }
       if (newImages.length > 0) setImages(prev => [...prev, ...newImages]);
     },
-    [enableVision]
+    []
   );
 
   const handleRemoveImage = useCallback(
@@ -268,14 +328,16 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
   const handleSend = useCallback(() => {
     if (disabled) return;
-    if (!text.trim() && images.length === 0) return;
-    onSend(text.trim(), images);
+    if (!text.trim() && images.length === 0 && attachedPaths.length === 0) return;
+    onSend(text.trim(), images, attachedPaths);
     setText('');
     setImages([]);
+    setAttachedPaths([]);
     setAtIdx(-1);
     setSuggestions([]);
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  }, [text, images, disabled, onSend]);
+    setBrowseDir('');
+    if (textareaRef.current) textareaRef.current.style.height = '120px';
+  }, [text, images, attachedPaths, disabled, onSend]);
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
 
@@ -302,37 +364,93 @@ export const InputArea: React.FC<InputAreaProps> = ({
           e.preventDefault();
           setAtIdx(-1);
           setSuggestions([]);
+          setBrowseDir('');
+          return;
+        }
+        if (e.key === 'Backspace' && browseDir) {
+          e.preventDefault();
+          // Go up one level
+          const parts = browseDir.split('/');
+          parts.pop();
+          setBrowseDir(parts.join('/'));
           return;
         }
       }
 
-      // Send on Enter (without Shift), only when no mention menu open
-      if (e.key === 'Enter' && !e.shiftKey && atIdx === -1) {
+      // Ctrl+Enter or Cmd+Enter → always send
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         handleSend();
+        return;
+      }
+
+      // Plain Enter on a short single-line text → send; otherwise newline
+      if (e.key === 'Enter' && !e.shiftKey && atIdx === -1) {
+        const lineCount = (text.match(/\n/g) || []).length + 1;
+        if (lineCount <= 2) {
+          e.preventDefault();
+          handleSend();
+        }
+        // 3+ lines: Enter inserts newline (let default happen)
       }
     },
-    [atIdx, suggestions, suggestionIdx, handleSelectSuggestion, handleSend]
+    [atIdx, suggestions, suggestionIdx, handleSelectSuggestion, handleSend, browseDir, text]
   );
 
-  const handleImageButtonClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
+  const canSend = !disabled && (
+    text.trim().length > 0 || images.length > 0 || attachedPaths.length > 0
+  );
 
-  const canSend = !disabled && (text.trim().length > 0 || images.length > 0);
-
-  // ── Mode label helper ─────────────────────────────────────────────────────
+  // ── Mode label ────────────────────────────────────────────────────────────
   const modeLabel = useMemo<string>(() => {
     if (mode === 'chat') return 'Chat';
     if (mode === 'agent') return 'Agent';
     return 'Plan';
   }, [mode]);
 
+  // ── Breadcrumb display ────────────────────────────────────────────────────
+  const browseDirDisplay = browseDir
+    ? browseDir.split('/').filter(Boolean).join(' / ')
+    : null;
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="llm-input-area">
-      {/* Image previews */}
+      {/* ── Attached path chips ─────────────────────────────────────────── */}
+      {attachedPaths.length > 0 && (
+        <div className="llm-attached-chips">
+          {attachedPaths.map(a => (
+            <div key={a.id} className={`llm-chip ${a.isDir ? 'llm-chip-dir' : 'llm-chip-file'}`}>
+              <span className="llm-chip-icon">
+                {a.isDir ? (
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                    <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                    <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+                  </svg>
+                )}
+              </span>
+              <span className="llm-chip-label" title={a.path}>
+                {a.path.split('/').pop() || a.path}
+              </span>
+              <button
+                className="llm-chip-remove"
+                onMouseDown={e => { e.preventDefault(); handleRemoveChip(a.id); }}
+                title="Remove"
+              >
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Image previews ───────────────────────────────────────────────── */}
       {images.length > 0 && (
         <div className="llm-image-previews">
           {images.map(image => (
@@ -352,25 +470,51 @@ export const InputArea: React.FC<InputAreaProps> = ({
         </div>
       )}
 
-      {/* @ mention popup — positioned above the input row */}
+      {/* ── @ mention popup ──────────────────────────────────────────────── */}
       {atIdx !== -1 && (
         <div className="llm-mention-menu" ref={mentionMenuRef}>
+          {/* Breadcrumb when drilling into a directory */}
+          {browseDirDisplay && (
+            <div className="llm-mention-breadcrumb">
+              <button
+                className="llm-mention-breadcrumb-back"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  const parts = browseDir.split('/');
+                  parts.pop();
+                  setBrowseDir(parts.join('/'));
+                }}
+                title="Go up"
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                  <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                </svg>
+              </button>
+              <span className="llm-mention-breadcrumb-path">{browseDirDisplay}</span>
+            </div>
+          )}
+
           {loadingSuggestions ? (
-            <div className="llm-mention-loading">Loading files…</div>
+            <div className="llm-mention-loading">Loading…</div>
           ) : suggestions.length === 0 ? (
-            <div className="llm-mention-empty">No matching files</div>
+            <div className="llm-mention-empty">No matches</div>
           ) : (
             suggestions.map((s, i) => (
               <div
                 key={s.path}
                 className={`llm-mention-item ${i === suggestionIdx ? 'active' : ''}`}
                 onMouseDown={e => {
-                  e.preventDefault(); // keep focus on textarea
-                  handleSelectSuggestion(s);
+                  e.preventDefault();
+                  if (s.isDir) {
+                    // Offer two actions: drill-down OR attach whole dir
+                    // Single click → drill-down; the "attach dir" chip button on hover
+                    handleSelectSuggestion(s);
+                  } else {
+                    handleSelectSuggestion(s);
+                  }
                 }}
                 onMouseEnter={() => setSuggestionIdx(i)}
               >
-                {/* Icon: folder vs file */}
                 <span className="llm-mention-icon">
                   {s.isDir ? (
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
@@ -382,78 +526,50 @@ export const InputArea: React.FC<InputAreaProps> = ({
                     </svg>
                   )}
                 </span>
-                <span className="llm-mention-label" title={s.path}>
-                  {s.label}
-                </span>
+                <span className="llm-mention-label" title={s.path}>{s.label}</span>
                 <span className="llm-mention-path">{s.path}</span>
+                {/* Attach-whole-dir button for directories */}
+                {s.isDir && (
+                  <button
+                    className="llm-mention-attach-dir"
+                    onMouseDown={e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleAttachDirAsChip(s);
+                    }}
+                    title="Attach entire directory"
+                  >
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                      <path d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                    </svg>
+                  </button>
+                )}
               </div>
             ))
           )}
           <div className="llm-mention-hint">
-            ↑↓ navigate · Tab/Enter select · Esc close
+            ↑↓ navigate · Enter/Tab select · Esc close · Backspace up{' '}
+            {suggestions.some(s => s.isDir) && '· click folder to browse · + to attach dir'}
           </div>
         </div>
       )}
 
-      {/* Input row */}
-      <div className="llm-input-row">
-        {/* Image upload button */}
-        {enableVision && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageSelect}
-              style={{ display: 'none' }}
-            />
-            <button
-              className="llm-image-btn"
-              onClick={handleImageButtonClick}
-              disabled={disabled}
-              title="Attach image"
-            >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
-              </svg>
-            </button>
-          </>
-        )}
+      {/* ── Main textarea ────────────────────────────────────────────────── */}
+      <textarea
+        ref={textareaRef}
+        className="llm-text-input llm-text-input-large"
+        value={text}
+        onChange={handleTextChange}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder={`Message (@ to reference files/dirs · paste images · Ctrl+Enter or Enter to send)`}
+        disabled={disabled}
+        rows={4}
+      />
 
-        {/* Text input */}
-        <textarea
-          ref={textareaRef}
-          className="llm-text-input"
-          value={text}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={
-            enableVision
-              ? 'Send a message… (paste images · @ to reference files)'
-              : 'Send a message… (@ to reference files)'
-          }
-          disabled={disabled}
-          rows={1}
-        />
-
-        {/* Send button */}
-        <button
-          className="llm-send-btn"
-          onClick={handleSend}
-          disabled={!canSend}
-          title="Send message (Enter)"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-          </svg>
-        </button>
-      </div>
-
-      {/* ── Bottom toolbar: mode selector + hint ──────────────────────────── */}
-      <div className="llm-input-footer">
-        {/* Mode selector */}
+      {/* ── Bottom toolbar ────────────────────────────────────────────────── */}
+      <div className="llm-input-toolbar">
+        {/* Left: mode selector */}
         <div className="llm-mode-selector">
           <svg
             className="llm-mode-selector-icon"
@@ -471,9 +587,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
             disabled={disabled}
             title="Switch mode"
           >
-            <option value="chat">Chat — direct conversation</option>
-            <option value="agent">Agent — reads/writes files & runs commands</option>
-            <option value="plan">Plan — generate a plan, then execute step by step</option>
+            <option value="chat">Chat</option>
+            <option value="agent">Agent</option>
+            <option value="plan">Plan</option>
           </select>
           <svg
             className="llm-mode-select-chevron"
@@ -486,9 +602,77 @@ export const InputArea: React.FC<InputAreaProps> = ({
           </svg>
         </div>
 
-        {/* Hint text */}
-        <div className="llm-input-hint">
-          <span>Enter · Shift+Enter for newline · @ for files</span>
+        {/* Hint */}
+        <span className="llm-input-hint-text">
+          {modeLabel} · Ctrl+Enter to send
+        </span>
+
+        {/* Right: action buttons */}
+        <div className="llm-input-actions">
+          {/* Image upload */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            className="llm-toolbar-btn"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={disabled}
+            title="Attach image"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+            </svg>
+          </button>
+
+          {/* File / directory attach */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={async e => {
+              const files = e.target.files;
+              if (!files) return;
+              for (const f of Array.from(files)) {
+                if (f.type.startsWith('image/')) {
+                  const dataUrl = await new Promise<string>(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.readAsDataURL(f);
+                  });
+                  setImages(prev => [...prev, { id: genId(), dataUrl, file: f, preview: dataUrl }]);
+                }
+              }
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }}
+            style={{ display: 'none' }}
+          />
+          <button
+            className="llm-toolbar-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            title="Attach file"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z" />
+            </svg>
+          </button>
+
+          {/* Send */}
+          <button
+            className="llm-send-btn"
+            onClick={handleSend}
+            disabled={!canSend}
+            title="Send (Ctrl+Enter)"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>

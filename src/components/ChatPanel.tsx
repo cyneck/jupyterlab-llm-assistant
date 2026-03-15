@@ -1,15 +1,16 @@
 /**
- * Main panel component — three modes in one unified shell.
+ * ChatPanel — Unified shell for Chat / Agent / Plan modes.
  *
- * Mode selector (Chat | Agent | Plan) lives in the **InputArea** footer
- * dropdown, keeping the header clean for utility buttons.
- * Memory and Context-file panels are shared across all modes.
- *
- * v0.6.0 changes:
- * - Moved mode selector from header buttons → InputArea dropdown
- * - InputArea now owns mode + onModeChange props
- * - @ file-reference support in InputArea
- * - Skill system TODO added (see bottom of file)
+ * v0.7.0 redesign:
+ * - All three modes share a SINGLE unified context: the InputArea at the
+ *   bottom is always visible regardless of mode.  Switching mode just changes
+ *   the message-display viewport above — no page navigation required.
+ * - ContextFilePanel removed; file/dir references are handled inline via the
+ *   @ mention picker and path chips in InputArea.
+ * - Attached paths (from @ picker) are forwarded to the active mode handler
+ *   which reads the file contents before sending to the LLM.
+ * - .llm-assistant workspace directory support added (session history,
+ *   ASSISTANT.md, per-project config, future skill loading).
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -17,12 +18,12 @@ import { LLMSettings, ImageData, ConnectionTestResult } from '../models/types';
 import { ChatModel } from '../models/chat';
 import { SettingsModel } from '../models/settings';
 import { MessageList } from './MessageList';
-import { InputArea } from './InputArea';
+import { InputArea, AttachedPath } from './InputArea';
 import { SettingsPanel } from './SettingsPanel';
 import { AgentPanel } from './AgentPanel';
 import { PlanPanel } from './PlanPanel';
 import { MemoryPanel } from './MemoryPanel';
-import { ContextFilePanel, loadContextState, ContextState } from './ContextFilePanel';
+import { LLMApiService } from '../services/api';
 
 export type AppMode = 'chat' | 'agent' | 'plan';
 
@@ -41,17 +42,72 @@ function loadSavedMode(): AppMode {
   return 'chat';
 }
 
+const _api = new LLMApiService();
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Given a list of AttachedPath chips, fetch their content from the backend
+ * and format as a context block to prepend to the message.
+ */
+async function buildContextFromAttachments(
+  paths: AttachedPath[],
+  rootDir: string,
+): Promise<string> {
+  if (paths.length === 0) return '';
+
+  const allPaths: string[] = [];
+  for (const a of paths) {
+    if (a.isDir) {
+      // Resolve directory to file list
+      try {
+        const res = await _api.resolveContextPath(a.path, rootDir);
+        allPaths.push(...res.paths.slice(0, 20));
+      } catch { /* skip */ }
+    } else {
+      allPaths.push(a.path);
+    }
+  }
+
+  if (allPaths.length === 0) return '';
+
+  try {
+    const res = await _api.readContextFiles(allPaths, rootDir);
+    const parts: string[] = [];
+    for (const f of res.files) {
+      if (f.error) continue;
+      parts.push(`\`\`\`// ${f.path}\n${f.content}\n\`\`\``);
+    }
+    if (parts.length === 0) return '';
+    return `<attached_files>\n${parts.join('\n\n')}\n</attached_files>\n\n`;
+  } catch {
+    return '';
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
-  const [showContext, setShowContext] = useState(false);
   const [currentSettings, setCurrentSettings] = useState<LLMSettings>(settings);
   const [mode, setMode] = useState<AppMode>(loadSavedMode);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [rootDir, setRootDir] = useState('');
 
-  // Context state (shared across all modes)
-  const [contextText, setContextText] = useState('');
-  const [contextState, setContextState] = useState<ContextState | null>(() => loadContextState());
+  // ── Per-mode "pending send" state ──────────────────────────────────────────
+  // When mode ≠ 'chat', a sent message is queued here and picked up by the
+  // active mode panel (AgentPanel / PlanPanel) via prop.
+  const [pendingAgentSend, setPendingAgentSend] = useState<{
+    text: string;
+    contextText: string;
+    seq: number;
+  } | null>(null);
+  const [pendingPlanSend, setPendingPlanSend] = useState<{
+    text: string;
+    contextText: string;
+    seq: number;
+  } | null>(null);
 
   // Chat model refs
   const chatModelRef = useRef<ChatModel | null>(null);
@@ -77,6 +133,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       chatModelRef.current.loadingChanged.connect((_, loading) => setIsLoading(loading));
       chatModelRef.current.errorChanged.connect((_, err) => setError(err));
     }
+
+    // Fetch the server's cwd for @ mention root
+    _api.getConfig().then(() => {
+      // rootDir is the server cwd — approximate via a known endpoint
+      // We just use '' which signals the backend to use os.getcwd()
+      setRootDir('');
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -87,27 +150,42 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   const handleModeChange = useCallback((m: AppMode) => {
     setMode(m);
     try { localStorage.setItem(MODE_STORAGE_KEY, m); } catch { /* ignore */ }
-    // Close any open side panels when switching modes
     setShowSettings(false);
     setShowMemory(false);
-    setShowContext(false);
   }, []);
 
-  // ── Context ────────────────────────────────────────────────────────────────
-  const handleContextChange = useCallback((text: string, state: ContextState) => {
-    setContextText(text);
-    setContextState(state);
-  }, []);
-
-  // ── Chat handlers ──────────────────────────────────────────────────────────
-  const handleSend = useCallback(async (text: string, images: ImageData[]) => {
+  // ── Unified send handler — routes to the active mode ──────────────────────
+  const handleSend = useCallback(async (
+    text: string,
+    images: ImageData[],
+    attachedPaths: AttachedPath[],
+  ) => {
     if (!chatModelRef.current) return;
-    try {
-      await chatModelRef.current.sendMessage(text, images, contextText || undefined);
-    } catch (err) {
-      console.error('Failed to send message:', err);
+
+    // Build context string from attached paths
+    const contextText = await buildContextFromAttachments(attachedPaths, rootDir);
+    const fullText = contextText ? `${contextText}${text}` : text;
+
+    if (mode === 'chat') {
+      try {
+        await chatModelRef.current.sendMessage(fullText, images, undefined);
+      } catch (err) {
+        console.error('Failed to send message:', err);
+      }
+    } else if (mode === 'agent') {
+      setPendingAgentSend(prev => ({
+        text: fullText,
+        contextText,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    } else if (mode === 'plan') {
+      setPendingPlanSend(prev => ({
+        text: fullText,
+        contextText,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
     }
-  }, [contextText]);
+  }, [mode, rootDir]);
 
   const handleClear = useCallback(() => chatModelRef.current?.clear(), []);
 
@@ -137,30 +215,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   const handleOpenSettings = useCallback(() => {
     setShowSettings(true);
     setShowMemory(false);
-    setShowContext(false);
   }, []);
 
   const handleToggleMemory = useCallback(() => {
     setShowMemory(v => !v);
-    setShowContext(false);
     setShowSettings(false);
   }, []);
 
-  const handleToggleContext = useCallback(() => {
-    setShowContext(v => !v);
-    setShowMemory(false);
-    setShowSettings(false);
-  }, []);
+  const hasApiKey = currentSettings.hasApiKey ||
+    (currentSettings.apiKey && currentSettings.apiKey.length > 0);
 
-  const contextFileCount = contextState?.selectedPaths.length ?? 0;
-
-  // ── Header (defined before return to follow React best practices) ──────────
-  // NOTE: Mode selector moved to InputArea footer dropdown (v0.6.0)
+  // ── Header ─────────────────────────────────────────────────────────────────
   const header = (
     <div className="llm-chat-header">
       <h3>LLM Assistant</h3>
       <div className="llm-header-actions">
-        {/* Memory button */}
+        {/* Memory */}
         <button
           className={`llm-header-btn ${showMemory ? 'active' : ''}`}
           onClick={handleToggleMemory}
@@ -171,22 +241,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
           </svg>
         </button>
 
-        {/* Context files button */}
-        <button
-          className={`llm-header-btn ${showContext ? 'active' : ''} ${contextFileCount > 0 ? 'llm-header-btn-has-context' : ''}`}
-          onClick={handleToggleContext}
-          title={`Context files${contextFileCount > 0 ? ` (${contextFileCount} selected)` : ''}`}
-        >
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
-            <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
-          </svg>
-          {contextFileCount > 0 && (
-            <span className="llm-context-badge">{contextFileCount}</span>
-          )}
-        </button>
-
         {/* Clear (chat mode only) */}
-        {mode === 'chat' && !showSettings && !showMemory && !showContext && (
+        {mode === 'chat' && !showSettings && !showMemory && (
           <button
             className="llm-header-btn"
             onClick={handleClear}
@@ -212,7 +268,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     </div>
   );
 
-  // ── Render side panels (overlay) ──────────────────────────────────────────
+  // ── Side panel overlays ────────────────────────────────────────────────────
   if (showSettings) {
     return (
       <div className="llm-chat-panel">
@@ -237,80 +293,70 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     );
   }
 
-  if (showContext) {
-    return (
-      <div className="llm-chat-panel">
-        {header}
-        <ContextFilePanel
-          onContextChange={handleContextChange}
-          initialState={contextState ?? undefined}
-          onClose={() => setShowContext(false)}
-        />
-      </div>
-    );
-  }
+  // ── Main layout ────────────────────────────────────────────────────────────
+  // All modes render the same InputArea at the bottom.
+  // The message viewport above changes depending on mode.
 
-  // ── Main content by mode ───────────────────────────────────────────────────
   return (
-    <div className="llm-chat-panel">
+    <div className="llm-chat-panel llm-unified-panel">
       {header}
 
-      {mode === 'agent' && (
-        <AgentPanel
-          settings={currentSettings}
-          contextText={contextText}
-          contextFileCount={contextFileCount}
-          mode={mode}
-          onModeChange={handleModeChange}
-        />
-      )}
-
-      {mode === 'plan' && (
-        <PlanPanel
-          settings={currentSettings}
-          contextText={contextText}
-          contextFileCount={contextFileCount}
-          mode={mode}
-          onModeChange={handleModeChange}
-        />
-      )}
-
-      {mode === 'chat' && (
-        <>
-          {error && (
-            <div className="llm-error-banner">
-              <span>{error}</span>
-              <button onClick={() => setError(null)}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
-              </button>
-            </div>
-          )}
-          {contextFileCount > 0 && (
-            <div className="llm-context-indicator" onClick={handleToggleContext} title="Click to manage context files">
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-                <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
-              </svg>
-              <span>{contextFileCount} context file{contextFileCount !== 1 ? 's' : ''} active</span>
-            </div>
-          )}
-          <div className="llm-model-indicator">
-            <span className="llm-model-name">{currentSettings.model}</span>
-            {!(currentSettings.hasApiKey || (currentSettings.apiKey && currentSettings.apiKey.length > 0)) && (
-              <span className="llm-api-warning">API Key not set</span>
+      {/* ── Mode viewport ──────────────────────────────────────────────── */}
+      <div className="llm-mode-viewport">
+        {mode === 'chat' && (
+          <>
+            {error && (
+              <div className="llm-error-banner">
+                <span>{error}</span>
+                <button onClick={() => setError(null)}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                </button>
+              </div>
             )}
-          </div>
-          <MessageList messages={messages} isLoading={isLoading} />
-          <InputArea
-            onSend={handleSend}
-            disabled={isLoading || !(currentSettings.hasApiKey || (currentSettings.apiKey && currentSettings.apiKey.length > 0))}
-            enableVision={currentSettings.enableVision}
+            <div className="llm-model-indicator">
+              <span className="llm-model-name">{currentSettings.model}</span>
+              {!hasApiKey && (
+                <span className="llm-api-warning">API Key not set</span>
+              )}
+            </div>
+            <MessageList messages={messages} isLoading={isLoading} />
+          </>
+        )}
+
+        {mode === 'agent' && (
+          <AgentPanel
+            settings={currentSettings}
             mode={mode}
             onModeChange={handleModeChange}
+            pendingSend={pendingAgentSend}
+            onPendingConsumed={() => setPendingAgentSend(null)}
           />
-        </>
-      )}
+        )}
+
+        {mode === 'plan' && (
+          <PlanPanel
+            settings={currentSettings}
+            mode={mode}
+            onModeChange={handleModeChange}
+            pendingSend={pendingPlanSend}
+            onPendingConsumed={() => setPendingPlanSend(null)}
+          />
+        )}
+      </div>
+
+      {/* ── Unified InputArea — always visible ────────────────────────── */}
+      <InputArea
+        onSend={handleSend}
+        disabled={
+          (mode === 'chat' && isLoading) ||
+          !hasApiKey
+        }
+        mode={mode}
+        onModeChange={handleModeChange}
+        rootDir={rootDir}
+      />
     </div>
   );
 };
@@ -345,4 +391,3 @@ export default ChatPanel;
 //    - In the @ mention menu, skills appear as a special category: @skill:<name>
 //
 // ─────────────────────────────────────────────────────────────────────────────
-

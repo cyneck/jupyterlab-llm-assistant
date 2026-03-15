@@ -351,6 +351,35 @@ export class LLMApiService {
   }
 
   /**
+   * List the immediate children of a directory (one level only).
+   * Returns both files and subdirectories.
+   */
+  async listDirContents(
+    dirPath: string,
+    rootDir: string = '',
+  ): Promise<{
+    entries: Array<{ name: string; path: string; isDir: boolean }>;
+  }> {
+    const r = await fetch(`${this.baseUrl}/context/listdir`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ path: dirPath, rootDir }),
+    });
+    if (!r.ok) {
+      // Fallback: use resolve which only returns files
+      const fallback = await this.resolveContextPath(dirPath, rootDir);
+      return {
+        entries: fallback.paths.map(p => ({
+          name: p.split('/').pop() || p,
+          path: p,
+          isDir: false,
+        })),
+      };
+    }
+    return r.json();
+  }
+
+  /**
    * Read one or more files and return their contents
    */
   async readContextFiles(
@@ -425,6 +454,103 @@ export class LLMApiService {
     }
     await this._readSSEStream(response, onEvent);
   }
+
+  // ── Workspace (.llm-assistant directory) API ─────────────────────────────
+
+  /** Get workspace info for the current project */
+  async getWorkspaceInfo(rootDir = ''): Promise<{
+    rootDir: string;
+    workspaceDir: string;
+    hasAssistantMd: boolean;
+    sessionCount: number;
+    skillCount: number;
+    exists: boolean;
+  }> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/info${params}`, {
+      headers: getHeaders(),
+    });
+    if (!r.ok) throw new Error(`Failed to get workspace info: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Get ASSISTANT.md content */
+  async getAssistantMd(rootDir = ''): Promise<{
+    content: string; path: string; exists: boolean; defaultContent: string;
+  }> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/assistant-md${params}`, {
+      headers: getHeaders(),
+    });
+    if (!r.ok) throw new Error(`Failed to get ASSISTANT.md: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Save ASSISTANT.md content */
+  async saveAssistantMd(content: string, rootDir = ''): Promise<void> {
+    const r = await fetch(`${this.baseUrl}/workspace/assistant-md`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({ content, rootDir }),
+    });
+    if (!r.ok) throw new Error(`Failed to save ASSISTANT.md: ${r.statusText}`);
+  }
+
+  /** List saved sessions */
+  async listSessions(rootDir = ''): Promise<Array<{
+    id: string; summary: string; savedAt: number; mode: string; messageCount: number;
+  }>> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/sessions${params}`, {
+      headers: getHeaders(),
+    });
+    if (!r.ok) throw new Error(`Failed to list sessions: ${r.statusText}`);
+    const d = await r.json();
+    return d.sessions ?? [];
+  }
+
+  /** Save a session */
+  async saveSession(session: {
+    id?: string;
+    summary: string;
+    mode: string;
+    messages: any[];
+    history: any[];
+    rootDir?: string;
+  }): Promise<{ id: string }> {
+    const r = await fetch(`${this.baseUrl}/workspace/sessions`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(session),
+    });
+    if (!r.ok) throw new Error(`Failed to save session: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Delete a session */
+  async deleteSession(id: string, rootDir = ''): Promise<void> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(
+      `${this.baseUrl}/workspace/sessions/${encodeURIComponent(id)}${params}`,
+      { method: 'DELETE', headers: getHeaders() },
+    );
+    if (!r.ok && r.status !== 404) throw new Error(`Failed to delete session: ${r.statusText}`);
+  }
+
+  /** List installed skills */
+  async listSkills(rootDir = ''): Promise<Array<{
+    name: string; description: string; version: string; enabled: boolean; type: string;
+  }>> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/skills${params}`, {
+      headers: getHeaders(),
+    });
+    if (!r.ok) throw new Error(`Failed to list skills: ${r.statusText}`);
+    const d = await r.json();
+    return d.skills ?? [];
+  }
+
+  // ── Internal SSE stream reader ────────────────────────────────────────────
 
   /** Internal SSE stream reader */
   private async _readSSEStream(

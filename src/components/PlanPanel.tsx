@@ -34,6 +34,13 @@ export interface PlanPanelProps {
   mode?: AppMode;
   /** Called when user switches mode via the selector */
   onModeChange?: (mode: AppMode) => void;
+  /**
+   * Pending send payload dispatched from the unified ChatPanel InputArea.
+   * When this changes (seq increments), the panel processes a new task.
+   */
+  pendingSend?: { text: string; contextText: string; seq: number } | null;
+  /** Called once after pendingSend has been consumed */
+  onPendingConsumed?: () => void;
 }
 
 interface StepExecution {
@@ -228,10 +235,12 @@ const StepCard: React.FC<StepCardProps> = ({ step, exec, isCurrent, phase, onEdi
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
   settings,
-  contextText,
+  contextText: propContextText,
   contextFileCount = 0,
   mode = 'plan',
   onModeChange,
+  pendingSend,
+  onPendingConsumed,
 }) => {
   const [phase, setPhase] = useState<PanelPhase>('input');
   const [taskInput, setTaskInput] = useState('');
@@ -248,7 +257,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
   const abortRef = useRef<AbortController | null>(null);
   const historyRef = useRef<Array<{ role: string; content: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -272,21 +280,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
       setPhase(allDone ? 'done' : anyRunning ? 'executing' : 'review');
     }
   }, []);
-
-  // Auto-scroll
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [steps, executions, generatingText]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
-    }
-  }, [taskInput]);
 
   // ── upsertExecMessage ──────────────────────────────────────────────────────
   const upsertExecMessage = useCallback((
@@ -316,8 +309,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
   }, []);
 
   // ── Generate Plan ──────────────────────────────────────────────────────────
-  const handleGenerate = useCallback(async () => {
-    const task = taskInput.trim();
+  const handleGenerate = useCallback(async (taskText?: string) => {
+    const task = (taskText ?? taskInput).trim();
     if (!task) return;
 
     setPhase('generating');
@@ -347,7 +340,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             setPhase('input');
           }
         },
-        contextText,
+        propContextText,
         abortRef.current.signal,
       );
     } catch (err) {
@@ -356,7 +349,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
       }
       setPhase('input');
     }
-  }, [taskInput, contextText]);
+  }, [taskInput, propContextText]);
 
   // ── Execute single step ────────────────────────────────────────────────────
   const executeStep = useCallback(async (step: PlanStep): Promise<string> => {
@@ -448,7 +441,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         },
         rootDir || undefined,
         // Only pass contextText on the very first step (no history yet)
-        historyRef.current.length === 0 ? contextText : undefined,
+        historyRef.current.length === 0 ? propContextText : undefined,
         settings,
         abortRef.current.signal,
       );
@@ -479,7 +472,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     } finally {
       setCurrentStepId(null);
     }
-  }, [settings, rootDir, contextText, upsertExecMessage, updateExecToolCall]);
+  }, [settings, rootDir, propContextText, upsertExecMessage, updateExecToolCall]);
 
   // ── Run all steps sequentially ─────────────────────────────────────────────
   // When autoRun is true  → execute every pending step one after another.
@@ -555,6 +548,18 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     abortRef.current?.abort();
     abortRef.current = null;
   }, []);
+
+  // ── React to pending send from the unified InputArea ───────────────────
+  const lastSeqRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!pendingSend) return;
+    if (pendingSend.seq === lastSeqRef.current) return;
+    lastSeqRef.current = pendingSend.seq;
+    // In plan mode: a new message from the InputArea triggers a plan generation
+    setTaskInput(pendingSend.text);
+    handleGenerate(pendingSend.text);
+    onPendingConsumed?.();
+  }, [pendingSend, handleGenerate, onPendingConsumed]);
 
   const handleSkipStep = useCallback((id: number) => {
     setSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'skipped' } : s));
@@ -781,86 +786,22 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         )}
       </div>
 
-      {/* ── Input / action bar ───────────────────────────── */}
-      <div className="agent-input-area">
-        {(phase === 'input' || phase === 'generating') && (
-          <>
-            <textarea
-              ref={textareaRef}
-              className="agent-input-textarea"
-              value={taskInput}
-              onChange={e => setTaskInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (taskInput.trim() && hasApiKey && phase === 'input') handleGenerate();
-                }
-              }}
-              placeholder={
-                !hasApiKey
-                  ? 'API key not configured — go to settings'
-                  : 'Describe your task… (Enter to generate plan)'
-              }
-              disabled={phase === 'generating' || !hasApiKey}
-              rows={1}
-            />
-            <div className="agent-input-actions">
-              {phase === 'generating' ? (
-                <button className="agent-stop-btn" onClick={handleStop} title="Cancel">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M6 6h12v12H6z" />
-                  </svg>
-                </button>
-              ) : (
-                <button
-                  className="agent-send-btn"
-                  onClick={handleGenerate}
-                  disabled={!taskInput.trim() || !hasApiKey}
-                  title="Generate plan (Enter)"
-                >
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
-                  </svg>
-                </button>
-              )}
-            </div>
-            <div className="agent-input-hint">
-              <div className="llm-mode-selector">
-                <svg
-                  className="llm-mode-selector-icon"
-                  viewBox="0 0 24 24"
-                  width="13"
-                  height="13"
-                  fill="currentColor"
-                >
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-8v4h4l-5 8z" />
-                </svg>
-                <select
-                  className="llm-mode-select"
-                  value={mode}
-                  onChange={e => onModeChange?.(e.target.value as AppMode)}
-                  disabled={phase === 'generating' || isRunning}
-                  title="Switch mode"
-                >
-                  <option value="chat">Chat — direct conversation</option>
-                  <option value="agent">Agent — reads/writes files &amp; runs commands</option>
-                  <option value="plan">Plan — generate a plan, then execute step by step</option>
-                </select>
-                <svg
-                  className="llm-mode-select-chevron"
-                  viewBox="0 0 24 24"
-                  width="12"
-                  height="12"
-                  fill="currentColor"
-                >
-                  <path d="M7 10l5 5 5-5z" />
-                </svg>
-              </div>
-              {contextFileCount > 0 && (
-                <span className="agent-cwd-label">📄 {contextFileCount} file{contextFileCount !== 1 ? 's' : ''}</span>
-              )}
-            </div>
-          </>
+      {/* ── Action bar (no internal textarea — input is unified in ChatPanel) ─ */}
+      <div className="plan-action-area">
+        {/* Generating indicator */}
+        {phase === 'generating' && (
+          <div className="agent-running-bar">
+            <span className="agent-thinking-dots">
+              <span /><span /><span />
+            </span>
+            <span className="agent-thinking-label">Generating plan…</span>
+            <button className="agent-stop-btn" onClick={handleStop} title="Cancel">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M6 6h12v12H6z" />
+              </svg>
+              Cancel
+            </button>
+          </div>
         )}
 
         {phase === 'review' && (

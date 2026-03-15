@@ -15,8 +15,18 @@ from jupyter_server.utils import url_path_join
 from .llm_client import LLMClient, LLMConfig
 from .agent_handler import AgentHandler
 from .memory_handler import MemoryListHandler, MemoryItemHandler, MemoryExportHandler
-from .context_handler import ContextReadHandler, ContextResolveHandler
+from .context_handler import ContextReadHandler, ContextResolveHandler, ContextListDirHandler
 from .plan_handler import PlanGenerateHandler, PlanExecuteHandler
+from .workspace_handler import (
+    WorkspaceInfoHandler,
+    AssistantMdHandler,
+    WorkspaceConfigHandler,
+    SessionListHandler,
+    SessionItemHandler,
+    SkillListHandler,
+    SkillInstallHandler,
+    SkillDeleteHandler,
+)
 
 
 class BaseConfigHandler(APIHandler):
@@ -261,12 +271,25 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
     routes += [
         (url_path_join(base_url, "/llm-assistant/context/read"), ContextReadHandler),
         (url_path_join(base_url, "/llm-assistant/context/resolve"), ContextResolveHandler),
+        (url_path_join(base_url, "/llm-assistant/context/listdir"), ContextListDirHandler),
     ]
 
     # Plan mode routes
     routes += [
         (url_path_join(base_url, "/llm-assistant/plan/generate"), PlanGenerateHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/plan/execute"), PlanExecuteHandler, {"config_store": config_store}),
+    ]
+
+    # .llm-assistant workspace routes (sessions, ASSISTANT.md, skills, per-project config)
+    routes += [
+        (url_path_join(base_url, "/llm-assistant/workspace/info"), WorkspaceInfoHandler),
+        (url_path_join(base_url, "/llm-assistant/workspace/assistant-md"), AssistantMdHandler),
+        (url_path_join(base_url, "/llm-assistant/workspace/config"), WorkspaceConfigHandler),
+        (url_path_join(base_url, "/llm-assistant/workspace/sessions"), SessionListHandler),
+        (url_path_join(base_url, r"/llm-assistant/workspace/sessions/([^/]+)"), SessionItemHandler),
+        (url_path_join(base_url, "/llm-assistant/workspace/skills"), SkillListHandler),
+        (url_path_join(base_url, "/llm-assistant/workspace/skills/install"), SkillInstallHandler),
+        (url_path_join(base_url, r"/llm-assistant/workspace/skills/([^/]+)"), SkillDeleteHandler),
     ]
 
     for route_pattern, handler, *handler_args_list in routes:

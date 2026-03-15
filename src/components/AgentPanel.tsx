@@ -23,14 +23,20 @@ import type { AppMode } from './ChatPanel';
 
 export interface AgentPanelProps {
   settings: LLMSettings;
-  /** Formatted context string (file contents) to prepend to every message */
-  contextText?: string;
-  /** Number of selected context files (for display) */
-  contextFileCount?: number;
   /** Current app mode — passed down so the mode selector stays in sync */
   mode?: AppMode;
   /** Called when user switches mode via the selector */
   onModeChange?: (mode: AppMode) => void;
+  /**
+   * Pending send payload dispatched from the unified ChatPanel InputArea.
+   * When this changes (seq increments), the panel processes a new user turn.
+   */
+  pendingSend?: { text: string; contextText: string; seq: number } | null;
+  /** Called once after pendingSend has been consumed */
+  onPendingConsumed?: () => void;
+  // Legacy — kept for backwards compat, ignored in v0.7
+  contextText?: string;
+  contextFileCount?: number;
 }
 
 // ─── Persistence helpers ──────────────────────────────────────────────────────
@@ -107,13 +113,12 @@ function uid(): string {
  */
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   settings,
-  contextText,
-  contextFileCount = 0,
   mode = 'agent',
   onModeChange,
+  pendingSend,
+  onPendingConsumed,
 }) => {
   const [messages, setMessages] = useState<AgentDisplayMessage[]>([]);
-  const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [iteration, setIteration] = useState<{ current: number; max: number } | null>(null);
@@ -123,7 +128,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const apiService = useRef(new LLMApiService());
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -158,14 +162,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
-    }
-  }, [input]);
 
   /**
    * Append or update a display message by id
@@ -214,11 +210,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   }, [rootDir]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || isRunning) return;
+  const handleSend = useCallback(async (text: string) => {
+    if (!text.trim() || isRunning) return;
 
-    setInput('');
     setError(null);
 
     // Create a fresh AbortController for this request
@@ -235,17 +229,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     };
     setMessages(prev => [...prev, userMsg]);
 
-    // Add to history — prepend context on first turn if provided
-    const isFirstTurn = historyRef.current.length === 0;
-    const userContent =
-      isFirstTurn && contextText
-        ? `${contextText}\n\n---\n\n${text}`
-        : text;
-    historyRef.current = [...historyRef.current, { role: 'user', content: userContent }];
+    // Add to history
+    historyRef.current = [...historyRef.current, { role: 'user', content: text }];
 
     setIsRunning(true);
-
-    // Track current agent text message id
     let currentTextId = uid();
     let currentTextContent = '';
     let textMsgCreated = false;
@@ -369,7 +356,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       setIsRunning(false);
       setIteration(null);
     }
-  }, [input, isRunning, settings, rootDir, upsertMessage, updateToolCall]);
+  }, [isRunning, settings, rootDir, upsertMessage, updateToolCall]);
 
   const handleStop = useCallback(() => {
     // Cancel the in-flight fetch — this terminates the SSE stream immediately.
@@ -380,6 +367,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setIsRunning(false);
     setIteration(null);
   }, []);
+
+  // ── React to pending send from the unified InputArea ───────────────────
+  const lastSeqRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!pendingSend) return;
+    if (pendingSend.seq === lastSeqRef.current) return;
+    lastSeqRef.current = pendingSend.seq;
+    handleSend(pendingSend.text);
+    onPendingConsumed?.();
+  }, [pendingSend, handleSend, onPendingConsumed]);
 
   const handleClear = useCallback(() => {
     // Archive current session before clearing
@@ -416,13 +413,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setHistoryItems(updated);
     saveHistory(updated);
   }, [historyItems]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
 
   const hasApiKey = !!(settings.hasApiKey || (settings.apiKey && settings.apiKey.length > 0));
 
@@ -564,7 +554,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 <button
                   key={p}
                   className="agent-example-btn"
-                  onClick={() => setInput(p)}
+                  onClick={() => handleSend(p)}
                   disabled={isRunning}
                 >
                   {p}
@@ -613,84 +603,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         )}
       </div>
 
-      {/* Input area */}
-      <div className="agent-input-area">
-        <textarea
-          ref={textareaRef}
-          className="agent-input-textarea"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            !hasApiKey
-              ? 'API key not configured — go to settings'
-              : 'Ask the agent to write, edit, or run code… (Enter to send)'
-          }
-          disabled={isRunning || !hasApiKey}
-          rows={1}
-        />
-        <div className="agent-input-actions">
-          {isRunning ? (
-            <button className="agent-stop-btn" onClick={handleStop} title="Stop">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M6 6h12v12H6z" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              className="agent-send-btn"
-              onClick={handleSend}
-              disabled={!input.trim() || !hasApiKey}
-              title="Send (Enter)"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-              </svg>
-            </button>
-          )}
-        </div>
-        <div className="agent-input-hint">
-          <div className="llm-mode-selector">
-            <svg
-              className="llm-mode-selector-icon"
-              viewBox="0 0 24 24"
-              width="13"
-              height="13"
-              fill="currentColor"
-            >
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-8v4h4l-5 8z" />
+      {/* Running indicator / stop control */}
+      {isRunning && (
+        <div className="agent-running-bar">
+          <span className="agent-thinking-dots">
+            <span /><span /><span />
+          </span>
+          <span className="agent-thinking-label">Running…</span>
+          <button className="agent-stop-btn" onClick={handleStop} title="Stop agent">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M6 6h12v12H6z" />
             </svg>
-            <select
-              className="llm-mode-select"
-              value={mode}
-              onChange={e => onModeChange?.(e.target.value as AppMode)}
-              disabled={isRunning}
-              title="Switch mode"
-            >
-              <option value="chat">Chat — direct conversation</option>
-              <option value="agent">Agent — reads/writes files &amp; runs commands</option>
-              <option value="plan">Plan — generate a plan, then execute step by step</option>
-            </select>
-            <svg
-              className="llm-mode-select-chevron"
-              viewBox="0 0 24 24"
-              width="12"
-              height="12"
-              fill="currentColor"
-            >
-              <path d="M7 10l5 5 5-5z" />
-            </svg>
-          </div>
-          <div className="agent-input-hint-right">
-            {contextFileCount > 0 && (
-              <span className="agent-cwd-label" title={`${contextFileCount} context file(s) active`}>
-                📄 {contextFileCount} file{contextFileCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {rootDir && <span className="agent-cwd-label" title={rootDir}>📁 {rootDir.split('/').pop()}</span>}
-          </div>
+            Stop
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };
