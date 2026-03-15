@@ -86,6 +86,7 @@ TODO (Skill System):
 
 import json
 import os
+import shutil
 import uuid
 import yaml
 import datetime
@@ -357,6 +358,10 @@ class SessionItemHandler(APIHandler):
 
     @web.authenticated
     async def get(self, session_id: str):
+        # Guard against path traversal (e.g. "../config")
+        if ".." in session_id or "/" in session_id or "\\" in session_id:
+            raise web.HTTPError(400, f"Invalid session id: {session_id}")
+
         root_dir = self.get_argument("rootDir", "")
         ws = _workspace_dir(root_dir)
         path = ws / SESSIONS_DIR_NAME / f"{session_id}.json"
@@ -364,10 +369,15 @@ class SessionItemHandler(APIHandler):
         if not path.exists():
             raise web.HTTPError(404, f"Session not found: {session_id}")
 
+        self.set_header("Content-Type", "application/json")
         self.finish(path.read_text(encoding="utf-8"))
 
     @web.authenticated
     async def delete(self, session_id: str):
+        # Guard against path traversal
+        if ".." in session_id or "/" in session_id or "\\" in session_id:
+            raise web.HTTPError(400, f"Invalid session id: {session_id}")
+
         root_dir = self.get_argument("rootDir", "")
         ws = _workspace_dir(root_dir)
         path = ws / SESSIONS_DIR_NAME / f"{session_id}.json"
@@ -488,7 +498,6 @@ class SkillDeleteHandler(APIHandler):
 
         dir_path = skills_dir / skill_name
         if dir_path.is_dir():
-            import shutil
             shutil.rmtree(dir_path)
             deleted = True
 
