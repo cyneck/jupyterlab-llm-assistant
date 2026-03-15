@@ -81,13 +81,25 @@ class LLMClient:
         messages: List[Dict[str, Any]],
         include_system: bool = True
     ) -> List[Dict[str, Any]]:
-        """Build the message list for the API call."""
+        """Build the message list for the API call.
+        
+        Active memories are automatically appended to the system prompt so that
+        the LLM always has access to persistent context without the user having
+        to repeat it each time.
+        """
+        from .memory_handler import get_memory_store  # lazy import to avoid circular
+
         result = []
 
-        if include_system and self.config.system_prompt:
+        if include_system:
+            system_content = self.config.system_prompt or "You are a helpful AI coding assistant."
+            # Append active memories to the system prompt
+            memory_text = get_memory_store().export_as_text()
+            if memory_text:
+                system_content = system_content + "\n\n" + memory_text
             result.append({
                 "role": "system",
-                "content": self.config.system_prompt
+                "content": system_content
             })
 
         result.extend(messages)

@@ -5,6 +5,7 @@ Provides REST API endpoints for chat and configuration management.
 """
 
 import json
+import os
 import asyncio
 from typing import Dict, Any, Optional, List
 from tornado import web
@@ -13,19 +14,34 @@ from jupyter_server.utils import url_path_join
 
 from .llm_client import LLMClient, LLMConfig
 from .agent_handler import AgentHandler
+from .memory_handler import MemoryListHandler, MemoryItemHandler, MemoryExportHandler
+from .context_handler import ContextReadHandler, ContextResolveHandler
+from .plan_handler import PlanGenerateHandler, PlanExecuteHandler
 
 
-class ConfigHandler(APIHandler):
+class BaseConfigHandler(APIHandler):
+    """
+    Base class for all handlers that need access to the config store.
+
+    Provides a single, canonical implementation of _get_api_key() so that
+    every subclass shares exactly the same logic without duplication.
+    """
+
+    def initialize(self, config_store: Dict[str, Any]):
+        self.config_store = config_store
+
+    def _get_api_key(self) -> Optional[str]:
+        """Return the API key from the config store or the OPENAI_API_KEY env var."""
+        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
+
+
+class ConfigHandler(BaseConfigHandler):
     """
     Handler for configuration management.
 
     GET: Retrieve current configuration
     POST: Update configuration
     """
-
-    def initialize(self, config_store: Dict[str, Any]):
-        """Initialize with config store."""
-        self.config_store = config_store
 
     def _build_safe_config(self) -> dict:
         """Build safe config dict excluding sensitive data."""
@@ -76,34 +92,20 @@ class ConfigHandler(APIHandler):
         # Fix: do NOT call await self.get() — build response directly
         self.finish(json.dumps(self._build_safe_config()))
 
-    def _get_api_key(self) -> Optional[str]:
-        """Get API key from config store or environment variable."""
-        import os
-        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
 
-
-class ChatHandler(APIHandler):
+class ChatHandler(BaseConfigHandler):
     """
     Handler for chat completion requests.
 
     Supports both regular and streaming responses.
     """
 
-    def initialize(self, config_store: Dict[str, Any]):
-        """Initialize with config store."""
-        self.config_store = config_store
-
-    def _get_api_key(self) -> Optional[str]:
-        """Get API key from config store or environment variable."""
-        import os
-        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
-
     def _create_client(self) -> LLMClient:
         """Create LLM client with current config."""
         config = LLMConfig(
-            api_endpoint=self.config_store.get("apiEndpoint", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            api_endpoint=self.config_store.get("apiEndpoint", "https://api.openai.com/v1"),
             api_key=self._get_api_key(),
-            model=self.config_store.get("model", "kimi-k2-thinking"),
+            model=self.config_store.get("model", "gpt-4o"),
             temperature=self.config_store.get("temperature", 0.7),
             max_tokens=self.config_store.get("maxTokens", 4096),
             system_prompt=self.config_store.get("systemPrompt", ""),
@@ -172,24 +174,14 @@ class ChatHandler(APIHandler):
                 raise web.HTTPError(500, str(e))
 
 
-class ModelsHandler(APIHandler):
+class ModelsHandler(BaseConfigHandler):
     """
     Handler for listing available models.
     """
 
-    def initialize(self, config_store: Dict[str, Any]):
-        """Initialize with config store."""
-        self.config_store = config_store
-
-    def _get_api_key(self) -> Optional[str]:
-        """Get API key from config store or environment variable."""
-        import os
-        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
-
     @web.authenticated
     async def get(self):
         """List available models from the API."""
-        import os
         from openai import AsyncOpenAI
 
         api_key = self._get_api_key()
@@ -216,19 +208,10 @@ class ModelsHandler(APIHandler):
             self.finish(json.dumps({"models": default_models, "error": str(e)}))
 
 
-class TestConnectionHandler(APIHandler):
+class TestConnectionHandler(BaseConfigHandler):
     """
     Handler for testing API connection.
     """
-
-    def initialize(self, config_store: Dict[str, Any]):
-        """Initialize with config store."""
-        self.config_store = config_store
-
-    def _get_api_key(self) -> Optional[str]:
-        """Get API key from config store or environment variable."""
-        import os
-        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
 
     @web.authenticated
     async def get(self):
@@ -267,5 +250,25 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
         (url_path_join(base_url, "/llm-assistant/agent"), AgentHandler, {"config_store": config_store}),
     )
 
-    for route_pattern, handler, handler_args in routes:
+    # Memory management routes
+    routes += [
+        (url_path_join(base_url, "/llm-assistant/memory"), MemoryListHandler),
+        (url_path_join(base_url, "/llm-assistant/memory/export"), MemoryExportHandler),
+        (url_path_join(base_url, r"/llm-assistant/memory/([^/]+)"), MemoryItemHandler),
+    ]
+
+    # Context / file-reference routes
+    routes += [
+        (url_path_join(base_url, "/llm-assistant/context/read"), ContextReadHandler),
+        (url_path_join(base_url, "/llm-assistant/context/resolve"), ContextResolveHandler),
+    ]
+
+    # Plan mode routes
+    routes += [
+        (url_path_join(base_url, "/llm-assistant/plan/generate"), PlanGenerateHandler, {"config_store": config_store}),
+        (url_path_join(base_url, "/llm-assistant/plan/execute"), PlanExecuteHandler, {"config_store": config_store}),
+    ]
+
+    for route_pattern, handler, *handler_args_list in routes:
+        handler_args = handler_args_list[0] if handler_args_list else {}
         web_app.add_handlers(host_pattern, [(route_pattern, handler, handler_args)])

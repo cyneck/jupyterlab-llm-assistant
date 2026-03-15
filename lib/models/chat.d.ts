@@ -74,9 +74,13 @@ export declare class ChatModel {
      */
     clearMessages(): void;
     /**
-     * Send a message and get a response
+     * Send a message and get a response.
+     *
+     * @param text         The user's message text
+     * @param images       Optional images to attach
+     * @param contextText  Optional context block (file contents) to prepend on the first user turn
      */
-    sendMessage(text: string, images?: ImageData[]): Promise<void>;
+    sendMessage(text: string, images?: ImageData[], contextText?: string): Promise<void>;
     /**
      * Clear chat history
      */

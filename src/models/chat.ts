@@ -177,23 +177,44 @@ export class ChatModel {
   }
 
   /**
-   * Send a message and get a response
+   * Send a message and get a response.
+   *
+   * @param text         The user's message text
+   * @param images       Optional images to attach
+   * @param contextText  Optional context block (file contents) to prepend on the first user turn
    */
-  async sendMessage(text: string, images: ImageData[] = []): Promise<void> {
-    // Add user message
+  async sendMessage(text: string, images: ImageData[] = [], contextText?: string): Promise<void> {
+    // Add user message (displayed as-is)
     this.addUserMessage(text, images);
 
     // Set loading state
     this.setLoading(true);
     this.setError(null);
 
-    // Prepare messages for API
+    // Prepare messages for API.
+    // If contextText is provided and this is the FIRST user turn (only the message we just
+    // added exists), prepend the context block to the content so the LLM sees it.
+    const isFirstTurn = this._messages.filter(m => m.role === 'user').length === 1;
     const apiMessages = this._messages
       .filter(msg => msg.role !== 'system')
-      .map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+      .map(msg => {
+        if (
+          isFirstTurn &&
+          contextText &&
+          msg.role === 'user' &&
+          typeof msg.content === 'string' &&
+          msg.content === text
+        ) {
+          return {
+            role: msg.role,
+            content: `${contextText}\n\n---\n\n${msg.content}`,
+          };
+        }
+        return {
+          role: msg.role,
+          content: msg.content,
+        };
+      });
 
     // Extract image data URLs
     const imageDataUrls = images.map(img => img.dataUrl);

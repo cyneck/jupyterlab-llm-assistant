@@ -137,13 +137,6 @@ export interface SettingsPanelProps {
     isTestingConnection: boolean;
 }
 /**
- * Chat panel props
- */
-export interface ChatPanelProps {
-    settings: LLMSettings;
-    onOpenSettings: () => void;
-}
-/**
  * Message list props
  */
 export interface MessageListProps {
@@ -176,5 +169,110 @@ export interface MarkdownRendererProps {
 export interface CodeBlockProps {
     code: string;
     language: string;
+}
+/**
+ * Agent tool call event from SSE
+ */
+export interface AgentToolCall {
+    id: string;
+    name: string;
+    args: Record<string, any>;
+}
+/**
+ * Agent tool result event from SSE
+ */
+export interface AgentToolResult {
+    id: string;
+    name: string;
+    success: boolean;
+    output: string;
+}
+/**
+ * Agent SSE event types
+ */
+export type AgentEventType = 'text' | 'tool_call' | 'tool_result' | 'iteration' | 'done' | 'error';
+/**
+ * Agent SSE event payload
+ */
+export interface AgentEvent {
+    type: AgentEventType;
+    data: any;
+}
+/**
+ * Tool call display state (for UI — tracks call + result together)
+ */
+export interface ToolCallEntry {
+    id: string;
+    name: string;
+    args: Record<string, any>;
+    result?: AgentToolResult;
+    status: 'pending' | 'running' | 'success' | 'error';
+    startTime: number;
+    endTime?: number;
+}
+/**
+ * Agent message types for the chat UI
+ */
+export type AgentMessageType = 'user' | 'agent_text' | 'tool_call' | 'system';
+/**
+ * An entry in the Agent conversation display
+ */
+export interface AgentDisplayMessage {
+    id: string;
+    type: AgentMessageType;
+    content?: string;
+    toolCall?: ToolCallEntry;
+    timestamp: number;
+    isStreaming?: boolean;
+    iteration?: number;
+}
+/**
+ * Agent panel props
+ */
+export interface AgentPanelProps {
+    settings: LLMSettings;
+    /** Formatted context string (file contents) to prepend to every message */
+    contextText?: string;
+    /** Number of selected context files (for display) */
+    contextFileCount?: number;
+}
+/**
+ * A persistent memory entry
+ */
+export interface MemoryEntry {
+    id: string;
+    title: string;
+    content: string;
+    tags: string[];
+    enabled: boolean;
+    created_at: number;
+    updated_at: number;
+}
+/**
+ * A file included as context
+ */
+export interface ContextFile {
+    path: string;
+    content: string | null;
+    lines: number;
+    size: number;
+    error: string | null;
+}
+/**
+ * Active context state
+ */
+export interface ContextState {
+    selectedPaths: string[];
+    rootDir: string;
+}
+export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'error' | 'skipped';
+/**
+ * A single step in an AI-generated plan
+ */
+export interface PlanStep {
+    id: number;
+    title: string;
+    description: string;
+    status: PlanStepStatus;
 }
 //# sourceMappingURL=types.d.ts.map

@@ -22,6 +22,10 @@ import { ToolCallDisplay } from './ToolCallDisplay';
 
 export interface AgentPanelProps {
   settings: LLMSettings;
+  /** Formatted context string (file contents) to prepend to every message */
+  contextText?: string;
+  /** Number of selected context files (for display) */
+  contextFileCount?: number;
 }
 
 // ─── Persistence helpers ──────────────────────────────────────────────────────
@@ -96,7 +100,7 @@ function uid(): string {
 /**
  * AgentPanel — the main coding agent UI
  */
-export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ settings, contextText, contextFileCount = 0 }) => {
   const [messages, setMessages] = useState<AgentDisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -110,7 +114,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const apiService = useRef(new LLMApiService());
-  const abortRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Conversation history for the backend (only user/assistant text turns)
@@ -206,7 +209,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
 
     setInput('');
     setError(null);
-    abortRef.current = false;
 
     // Create a fresh AbortController for this request
     const controller = new AbortController();
@@ -222,8 +224,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
     };
     setMessages(prev => [...prev, userMsg]);
 
-    // Add to history
-    historyRef.current = [...historyRef.current, { role: 'user', content: text }];
+    // Add to history — prepend context on first turn if provided
+    const isFirstTurn = historyRef.current.length === 0;
+    const userContent =
+      isFirstTurn && contextText
+        ? `${contextText}\n\n---\n\n${text}`
+        : text;
+    historyRef.current = [...historyRef.current, { role: 'user', content: userContent }];
 
     setIsRunning(true);
 
@@ -239,8 +246,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
       await apiService.current.runAgent(
         historyRef.current,
         (event) => {
-          if (abortRef.current) return;
-
           switch (event.type) {
             case 'text': {
               const chunk: string = event.data?.content || '';
@@ -356,8 +361,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
   }, [input, isRunning, settings, rootDir, upsertMessage, updateToolCall]);
 
   const handleStop = useCallback(() => {
-    abortRef.current = true;
-    // Actually cancel the in-flight fetch — this terminates the SSE stream immediately
+    // Cancel the in-flight fetch — this terminates the SSE stream immediately.
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -636,7 +640,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ settings }) => {
         </div>
         <div className="agent-input-hint">
           <span>Enter to send · Shift+Enter for newline</span>
-          {rootDir && <span className="agent-cwd-label" title={rootDir}>📁 {rootDir.split('/').pop()}</span>}
+          <div className="agent-input-hint-right">
+            {contextFileCount > 0 && (
+              <span className="agent-cwd-label" title={`${contextFileCount} context file(s) active`}>
+                📄 {contextFileCount} file{contextFileCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {rootDir && <span className="agent-cwd-label" title={rootDir}>📁 {rootDir.split('/').pop()}</span>}
+          </div>
         </div>
       </div>
     </div>

@@ -33,11 +33,12 @@
     "url": "https://github.com/example/jupyterlab-llm-assistant.git"
   },
   "scripts": {
-    "build": "jlpm run build:lib && jlpm run build:labextension:dev",
-    "build:prod": "jlpm run clean && jlpm run build:lib && jlpm run build:labextension",
+    "build": "jlpm run build:lib && jlpm run build:labextension:dev && jlpm run deploy",
+    "build:prod": "jlpm run clean && jlpm run build:lib && jlpm run build:labextension && jlpm run deploy",
     "build:labextension": "jupyter labextension build .",
     "build:labextension:dev": "jupyter labextension build --development True .",
     "build:lib": "tsc",
+    "deploy": "rsync -a jupyterlab_llm_assistant/labextension/ \"$(jupyter --data-dir)/labextensions/jupyterlab-llm-assistant/\"",
     "clean": "jlpm run clean:lib",
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
     "clean:labextension": "rimraf jupyterlab_llm_assistant/labextension",
@@ -94,7 +95,7 @@
       "@jupyterlab/ui-components"
     ],
     "_build": {
-      "load": "static/remoteEntry.6b92f63292a935936032.js",
+      "load": "static/remoteEntry.75735b0ae0efea65ccd7.js",
       "extension": "./extension",
       "style": "./style"
     }

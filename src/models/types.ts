@@ -154,13 +154,8 @@ export interface SettingsPanelProps {
   isTestingConnection: boolean;
 }
 
-/**
- * Chat panel props
- */
-export interface ChatPanelProps {
-  settings: LLMSettings;
-  onOpenSettings: () => void;
-}
+// NOTE: ChatPanelProps is defined in ChatPanel.tsx where it is used;
+// the copy that was here has been removed to avoid duplication.
 
 /**
  * Message list props
@@ -279,4 +274,64 @@ export interface AgentDisplayMessage {
  */
 export interface AgentPanelProps {
   settings: LLMSettings;
+  /** Formatted context string (file contents) to prepend to every message */
+  contextText?: string;
+  /** Number of selected context files (for display) */
+  contextFileCount?: number;
+}
+
+// ============================================================
+// Memory types
+// ============================================================
+
+/**
+ * A persistent memory entry
+ */
+export interface MemoryEntry {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  enabled: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+// ============================================================
+// Context file types
+// ============================================================
+
+/**
+ * A file included as context
+ */
+export interface ContextFile {
+  path: string;
+  content: string | null;
+  lines: number;
+  size: number;
+  error: string | null;
+}
+
+/**
+ * Active context state
+ */
+export interface ContextState {
+  selectedPaths: string[];
+  rootDir: string;
+}
+
+// ============================================================
+// Plan mode types
+// ============================================================
+
+export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'error' | 'skipped';
+
+/**
+ * A single step in an AI-generated plan
+ */
+export interface PlanStep {
+  id: number;
+  title: string;
+  description: string;
+  status: PlanStepStatus;
 }
