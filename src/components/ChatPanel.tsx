@@ -14,6 +14,7 @@ import { SettingsModel } from '../models/settings';
 import { InputArea, AttachedPath } from './InputArea';
 import { SettingsPanel } from './SettingsPanel';
 import { MemoryPanel } from './MemoryPanel';
+import { SessionPanel } from './SessionPanel';
 import { UnifiedMessageList } from './UnifiedMessageList';
 import { LLMApiService } from '../services/api';
 
@@ -22,28 +23,47 @@ export interface ChatPanelProps {
   onOpenSettings: () => void;
 }
 
-const MODE_STORAGE_KEY = 'jlab-llm-mode';
-const MESSAGES_STORAGE_KEY = 'jlab-llm-messages';
+// Session storage - using backend .llm-assistant/sessions/ directory
+const DEFAULT_SESSION_ID = 'default';
+let currentSessionId = DEFAULT_SESSION_ID;
 
-function loadSavedMode(): MessageMode {
+async function loadSessionFromBackend(rootDir: string): Promise<{ messages: UnifiedMessage[]; id: string }> {
   try {
-    const raw = localStorage.getItem(MODE_STORAGE_KEY);
-    if (raw === 'agent' || raw === 'plan' || raw === 'chat') return raw;
-  } catch { /* ignore */ }
-  return 'agent';
+    const sessions = await _api.listSessions(rootDir);
+    if (sessions.length > 0) {
+      const latest = sessions[0];
+      const session = await _api.loadSession(latest.id, rootDir);
+      return { messages: session.messages || [], id: session.id };
+    }
+  } catch { /* no session found, start fresh */ }
+  return { messages: [], id: DEFAULT_SESSION_ID };
 }
 
-function loadSavedMessages(): UnifiedMessage[] {
-  try {
-    const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
+async function saveSessionToBackend(
+  rootDir: string,
+  messages: UnifiedMessage[],
+  mode: MessageMode,
+  sessionId: string = currentSessionId
+): Promise<void> {
+  // Generate summary from first user message
+  const firstUserMsg = messages.find(m => m.role === 'user');
+  const summary = firstUserMsg
+    ? firstUserMsg.content.slice(0, 50) + (firstUserMsg.content.length > 50 ? '...' : '')
+    : 'New conversation';
 
-function saveMessages(messages: UnifiedMessage[]) {
   try {
-    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages.slice(-100)));
-  } catch { /* ignore */ }
+    const result = await _api.saveSession({
+      id: sessionId,
+      summary,
+      mode,
+      messages: messages.slice(-100), // keep last 100 messages
+      history: [],
+      rootDir,
+    });
+    currentSessionId = result.id;
+  } catch (err) {
+    console.error('Failed to save session:', err);
+  }
 }
 
 const _api = new LLMApiService();
@@ -93,18 +113,21 @@ function uid(): string {
 export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
+  const [showSession, setShowSession] = useState(false);
   const [currentSettings, setCurrentSettings] = useState<LLMSettings>(settings);
-  const [sendMode, setSendMode] = useState<MessageMode>(loadSavedMode);
+  const [sendMode, setSendMode] = useState<MessageMode>('agent');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [rootDir, setRootDir] = useState('');
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
 
   // Unified message state
-  const [messages, setMessages] = useState<UnifiedMessage[]>(loadSavedMessages);
+  const [messages, setMessages] = useState<UnifiedMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const settingsModelRef = useRef<SettingsModel | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const rootDirRef = useRef<string>('');
 
   // ── Initialize ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -115,23 +138,51 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       });
     }
 
+    // Load workspace and session
     _api.getWorkspaceInfo('').then(info => {
-      setRootDir(info.rootDir || '');
+      const dir = info.rootDir || '';
+      setRootDir(dir);
+      rootDirRef.current = dir;
+      // Set rootDir for workspace config
+      if (settingsModelRef.current) {
+        settingsModelRef.current.setRootDir(dir);
+      }
+      // Load session from backend
+      return loadSessionFromBackend(dir);
+    }).then(sessionData => {
+      if (sessionData.messages.length > 0) {
+        setMessages(sessionData.messages);
+        currentSessionId = sessionData.id;
+      }
     }).catch(() => {
       setRootDir('');
+    }).finally(() => {
+      setIsLoadingSession(false);
     });
   }, []);
 
-  // Persist messages
+  // Persist messages to backend when changed
   useEffect(() => {
-    saveMessages(messages);
-  }, [messages]);
+    if (isLoadingSession || !rootDirRef.current || messages.length === 0) return;
+    const timeoutId = setTimeout(() => {
+      saveSessionToBackend(rootDirRef.current, messages, sendMode);
+    }, 1000); // Debounce 1 second
+    return () => clearTimeout(timeoutId);
+  }, [messages, sendMode, isLoadingSession]);
 
   // ── Mode switching (only affects send handler) ────────────────────────────
   const handleModeChange = useCallback((m: MessageMode) => {
+    // Cancel any ongoing request when switching modes
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setSendMode(m);
-    try { localStorage.setItem(MODE_STORAGE_KEY, m); } catch { /* ignore */ }
-  }, []);
+    // Persist mode to session
+    if (rootDirRef.current && messages.length > 0) {
+      saveSessionToBackend(rootDirRef.current, messages, m);
+    }
+  }, [messages]);
 
   // ── Message handlers ───────────────────────────────────────────────────────
   const addMessage = useCallback((msg: Omit<UnifiedMessage, 'id' | 'timestamp'>): UnifiedMessage => {
@@ -158,6 +209,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     setIsProcessing(true);
     setError(null);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     // Build API messages from history
     const apiMessages = messages
       .filter(m => m.role !== 'system')
@@ -174,6 +228,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
           apiMessages,
           imageDataUrls.length > 0 ? imageDataUrls : undefined,
           (chunk: string) => {
+            if (controller.signal.aborted) return;
             setMessages(prev => {
               const idx = prev.findIndex(m => m.id === assistantMsg.id);
               if (idx === -1) return prev;
@@ -182,23 +237,35 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
               return next;
             });
           },
-          currentSettings
+          currentSettings,
+          controller.signal,
         );
 
-        updateMessage(assistantMsg.id, { isStreaming: false });
+        if (!controller.signal.aborted) {
+          updateMessage(assistantMsg.id, { isStreaming: false });
+        }
       } else {
         const response = await _api.chat(
           apiMessages,
           imageDataUrls.length > 0 ? imageDataUrls : undefined,
-          currentSettings
+          currentSettings,
+          controller.signal,
         );
-        addMessage({ role: 'assistant', content: response.content, mode: 'chat' });
+
+        if (!controller.signal.aborted) {
+          addMessage({ role: 'assistant', content: response.content, mode: 'chat' });
+        }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'An error occurred';
-      setError(msg);
-      addMessage({ role: 'assistant', content: `Error: ${msg}`, mode: 'chat', error: msg });
+      if (err instanceof Error && err.name !== 'AbortError') {
+        const msg = err instanceof Error ? err.message : 'An error occurred';
+        setError(msg);
+        addMessage({ role: 'assistant', content: `Error: ${msg}`, mode: 'chat', error: msg });
+      }
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsProcessing(false);
     }
   }, [messages, currentSettings, addMessage, updateMessage]);
@@ -409,10 +476,46 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     setIsProcessing(false);
   }, []);
 
-  const handleClear = useCallback(() => {
+  const handleClear = useCallback(async () => {
     setMessages([]);
     setError(null);
-    try { localStorage.removeItem(MESSAGES_STORAGE_KEY); } catch { /* ignore */ }
+    currentSessionId = DEFAULT_SESSION_ID;
+    // Delete session from backend
+    try {
+      await _api.deleteSession(DEFAULT_SESSION_ID, rootDirRef.current);
+    } catch { /* ignore if no session to delete */ }
+  }, []);
+
+  const handleNewSession = useCallback(() => {
+    // Clear current messages and reset session id to create a new session
+    setMessages([]);
+    currentSessionId = DEFAULT_SESSION_ID;
+    setShowSession(false);
+  }, []);
+
+  const handleRootDirChange = useCallback((newRootDir: string) => {
+    setRootDir(newRootDir);
+    rootDirRef.current = newRootDir;
+    // Reload sessions from new directory
+    setShowSession(false);
+    setTimeout(() => setShowSession(true), 0);
+  }, []);
+
+  const handleLoadSession = useCallback(async (sessionId: string) => {
+    try {
+      const session = await _api.loadSession(sessionId, rootDirRef.current);
+      if (session.messages && session.messages.length > 0) {
+        setMessages(session.messages);
+        currentSessionId = sessionId;
+        if (session.mode) {
+          setSendMode(session.mode as MessageMode);
+        }
+      }
+      setShowSession(false);
+    } catch (err) {
+      console.error('Failed to load session:', err);
+      setError('Failed to load session');
+    }
   }, []);
 
   // ── Settings handlers ──────────────────────────────────────────────────────
@@ -467,6 +570,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       <h3>LLM Assistant</h3>
       <div className="llm-header-actions">
         <button
+          className={`llm-header-btn ${showSession ? 'active' : ''}`}
+          onClick={() => setShowSession(v => !v)}
+          title="Sessions"
+        >
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
+            <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.22 10.51 20 13 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+          </svg>
+        </button>
+        <button
           className={`llm-header-btn ${showMemory ? 'active' : ''}`}
           onClick={() => setShowMemory(v => !v)}
           title="Memory"
@@ -475,7 +587,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
           </svg>
         </button>
-        {!showSettings && !showMemory && (
+        {!showSettings && !showMemory && !showSession && (
           <button className="llm-header-btn" onClick={handleClear} title="Clear chat">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
@@ -516,6 +628,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       <div className="llm-chat-panel">
         {header}
         <MemoryPanel onClose={() => setShowMemory(false)} />
+      </div>
+    );
+  }
+
+  if (showSession) {
+    return (
+      <div className="llm-chat-panel">
+        {header}
+        <SessionPanel
+          onClose={() => setShowSession(false)}
+          onLoadSession={handleLoadSession}
+          onNewSession={handleNewSession}
+          rootDir={rootDir}
+          onRootDirChange={handleRootDirChange}
+        />
       </div>
     );
   }

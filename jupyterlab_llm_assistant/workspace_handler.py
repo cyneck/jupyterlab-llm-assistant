@@ -301,11 +301,13 @@ class SessionListHandler(APIHandler):
 
         summaries = []
         if sessions_dir.exists():
+            # Sort by modification time (newest first)
             for f in sorted(sessions_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
                 try:
                     data = json.loads(f.read_text(encoding="utf-8"))
+                    # Use filename (without .json) as id
                     summaries.append({
-                        "id": data.get("id", f.stem),
+                        "id": f.stem,  # e.g., "20250318_143022_123"
                         "summary": data.get("summary", "(no summary)"),
                         "savedAt": data.get("savedAt", 0),
                         "mode": data.get("mode", "chat"),
@@ -328,11 +330,28 @@ class SessionListHandler(APIHandler):
         _ensure_dirs(ws)
         sessions_dir = ws / SESSIONS_DIR_NAME
 
-        session_id = body.get("id") or str(uuid.uuid4())
+        now = datetime.datetime.now()
+        provided_id = body.get("id")
+
+        # Check if we're updating an existing session
+        # "default" is a special value meaning "create new session"
+        if provided_id and provided_id != "default":
+            existing_path = sessions_dir / f"{provided_id}.json"
+            if existing_path.exists():
+                # Update existing session file (keep original filename)
+                filename = provided_id
+            else:
+                # Provided id doesn't exist, create new with that id as filename
+                filename = provided_id
+        else:
+            # Generate timestamp-based filename for new session
+            filename = now.strftime("%Y%m%d_%H%M%S")
+            filename += f"_{now.microsecond // 1000:03d}"
+
         payload = {
-            "id": session_id,
+            "id": filename,
             "summary": body.get("summary", "(no summary)"),
-            "savedAt": body.get("savedAt", int(datetime.datetime.now().timestamp() * 1000)),
+            "savedAt": body.get("savedAt", int(now.timestamp() * 1000)),
             "mode": body.get("mode", "chat"),
             "messages": body.get("messages", []),
             "history": body.get("history", []),
@@ -342,10 +361,11 @@ class SessionListHandler(APIHandler):
         if len(raw) > MAX_SESSION_SIZE:
             raise web.HTTPError(413, "Session too large (max 2 MB)")
 
-        path = sessions_dir / f"{session_id}.json"
+        # Save to file (update existing or create new)
+        path = sessions_dir / f"{filename}.json"
         path.write_text(raw, encoding="utf-8")
 
-        self.finish(json.dumps({"ok": True, "id": session_id}))
+        self.finish(json.dumps({"ok": True, "id": filename}))
 
 
 # ── SessionItemHandler ─────────────────────────────────────────────────────────

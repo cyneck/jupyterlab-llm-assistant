@@ -1827,3 +1827,286 @@ body[data-jp-theme-light='false'] .llm-mode-badge-plan {
 .llm-message-loading {
   opacity: 0.7;
 }
+
+/* ==============================================================================
+   Session Panel
+   ============================================================================== */
+
+.llm-session-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--jp-layout-color1);
+}
+
+.llm-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--jp-border-color1);
+}
+
+.llm-session-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.llm-session-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.llm-session-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-session-empty .llm-hint {
+  font-size: 12px;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+.llm-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.llm-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+}
+
+.llm-session-item:hover {
+  background: var(--jp-layout-color2);
+  border-color: var(--jp-border-color1);
+}
+
+.llm-session-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.llm-session-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.llm-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-session-mode {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--jp-layout-color3);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.llm-session-mode.llm-mode-chat {
+  background: var(--jp-info-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-session-mode.llm-mode-agent {
+  background: var(--jp-success-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-session-mode.llm-mode-plan {
+  background: var(--jp-warning-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-session-count {
+  opacity: 0.8;
+}
+
+.llm-session-date {
+  opacity: 0.6;
+}
+
+.llm-session-delete {
+  background: transparent;
+  border: none;
+  color: var(--jp-ui-font-color2);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.llm-session-item:hover .llm-session-delete {
+  opacity: 1;
+}
+
+.llm-session-delete:hover {
+  background: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-session-error {
+  padding: 16px;
+  text-align: center;
+  color: var(--jp-error-color0);
+}
+
+.llm-session-error button {
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
+  cursor: pointer;
+}
+
+.llm-loading {
+  padding: 32px;
+  text-align: center;
+  color: var(--jp-ui-font-color2);
+}
+
+/* Session Panel Header Actions */
+.llm-session-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-new-session-btn {
+  color: var(--jp-brand-color1);
+}
+
+.llm-new-session-btn:hover {
+  background: var(--jp-brand-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+/* Project Directory Section */
+.llm-rootdir-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--jp-border-color0);
+  background: var(--jp-layout-color0);
+}
+
+.llm-rootdir-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.llm-rootdir-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-rootdir-edit-btn {
+  background: transparent;
+  border: none;
+  color: var(--jp-ui-font-color2);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.llm-rootdir-edit-btn:hover {
+  color: var(--jp-brand-color1);
+  background: var(--jp-layout-color2);
+}
+
+.llm-rootdir-path {
+  font-size: 12px;
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-code-font-family);
+  word-break: break-all;
+  opacity: 0.8;
+}
+
+.llm-rootdir-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.llm-rootdir-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-code-font-family);
+  font-size: 12px;
+  outline: none;
+}
+
+.llm-rootdir-input:focus {
+  border-color: var(--jp-brand-color1);
+}
+
+.llm-rootdir-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.llm-rootdir-save,
+.llm-rootdir-cancel {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.llm-rootdir-save {
+  background-color: var(--jp-brand-color1);
+  color: white;
+}
+
+.llm-rootdir-save:hover {
+  background-color: var(--jp-brand-color0);
+}
+
+.llm-rootdir-cancel {
+  background-color: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-rootdir-cancel:hover {
+  background-color: var(--jp-layout-color3);
+}

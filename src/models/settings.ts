@@ -1,5 +1,7 @@
 /**
  * Settings model for managing LLM settings.
+ *
+ * Uses workspace config (.llm-assistant/config.json) for persistence.
  */
 
 import { Signal } from '@lumino/signaling';
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: LLMSettings = {
 export class SettingsModel {
   private _settings: LLMSettings;
   private _apiService: LLMApiService;
+  private _rootDir: string = '';
 
   /**
    * Signal emitted when settings change
@@ -45,6 +48,13 @@ export class SettingsModel {
   }
 
   /**
+   * Set root directory for workspace config
+   */
+  setRootDir(rootDir: string): void {
+    this._rootDir = rootDir;
+  }
+
+  /**
    * Update settings
    */
   updateSettings(updates: Partial<LLMSettings>): void {
@@ -53,12 +63,23 @@ export class SettingsModel {
   }
 
   /**
-   * Load settings from server
+   * Load settings from workspace config (.llm-assistant/config.json)
    */
   async loadSettings(): Promise<LLMSettings> {
     try {
-      const settings = await this._apiService.getConfig();
-      this._settings = { ...DEFAULT_SETTINGS, ...settings };
+      const wsConfig = await this._apiService.getWorkspaceConfig(this._rootDir);
+      const wsSettings = wsConfig.config || {};
+      // Merge with defaults and server config
+      const serverConfig = await this._apiService.getConfig();
+      this._settings = {
+        ...DEFAULT_SETTINGS,
+        ...serverConfig,
+        ...wsSettings,
+        // Preserve hasApiKey from server config
+        hasApiKey: serverConfig.hasApiKey,
+        // Don't load apiKey from workspace (security)
+        apiKey: wsSettings.apiKey || '',
+      };
       this.settingsChanged.emit(this._settings);
       return this._settings;
     } catch (err) {
@@ -68,11 +89,30 @@ export class SettingsModel {
   }
 
   /**
-   * Save settings to server
+   * Save settings to workspace config (.llm-assistant/config.json)
+   * Also saves apiKey to server config_store if present
    */
   async saveSettings(settings: Partial<LLMSettings>): Promise<void> {
+    // Save apiKey to server config_store if provided
+    if (settings.apiKey) {
+      try {
+        await this._apiService.setConfig({ apiKey: settings.apiKey });
+      } catch (err) {
+        console.error('Failed to save API key to server:', err);
+      }
+    }
+
+    // Filter out sensitive fields and internal fields for workspace config
+    const wsSettings: Partial<LLMSettings> = {};
+    const allowedKeys = ['model', 'temperature', 'maxTokens', 'systemPrompt', 'enableStreaming', 'enableVision', 'apiEndpoint'];
+    for (const key of allowedKeys) {
+      if (key in settings) {
+        (wsSettings as any)[key] = (settings as any)[key];
+      }
+    }
+
     try {
-      await this._apiService.setConfig(settings);
+      await this._apiService.setWorkspaceConfig(wsSettings as Record<string, any>, this._rootDir);
       this._settings = { ...this._settings, ...settings };
       this.settingsChanged.emit(this._settings);
     } catch (err) {

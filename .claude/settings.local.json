@@ -13,7 +13,9 @@
       "Bash(jupyter --version)",
       "Bash(/opt/conda/bin/python -c \"import jupyterlab_llm_assistant; print\\('OK'\\)\" 2>&1)",
       "Bash(timeout 10 jupyter lab --allow-root --no-browser)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

@@ -22,6 +22,7 @@ from openai import AsyncOpenAI
 from .agent_tools import AgentToolExecutor
 from .agent_loop import run_agent_loop
 from .memory_handler import get_memory_store
+from .workspace_handler import load_project_config
 
 # ─── Shared base ─────────────────────────────────────────────────────────────
 
@@ -36,7 +37,33 @@ class BasePlanHandler(APIHandler):
         self.config_store = config_store
 
     def _get_api_key(self) -> Optional[str]:
-        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
+        """Get API key from config_store, workspace config, or environment."""
+        # Try config_store first (set via /config POST)
+        key = self.config_store.get("apiKey")
+        if key:
+            return key
+        # Try workspace config (.llm-assistant/config.json)
+        try:
+            ws_config = load_project_config()
+            key = ws_config.get("apiKey")
+            if key:
+                return key
+        except Exception:
+            pass
+        # Fallback to environment
+        return os.environ.get("OPENAI_API_KEY")
+
+    def _get_merged_config(self) -> Dict[str, Any]:
+        """Get merged config from config_store and workspace config."""
+        merged = dict(self.config_store)
+        try:
+            ws_config = load_project_config()
+            for key, value in ws_config.items():
+                if key not in merged or not merged[key]:
+                    merged[key] = value
+        except Exception:
+            pass
+        return merged
 
     async def _send_event(self, event_type: str, data: Any):
         payload = json.dumps({"type": event_type, "data": data})
@@ -130,6 +157,7 @@ class PlanGenerateHandler(BasePlanHandler):
         client = AsyncOpenAI(
             api_key=self._get_api_key(),
             base_url=self.config_store.get("apiEndpoint", DEFAULT_API_ENDPOINT),
+            timeout=120.0,
         )
         model = self.config_store.get("model", DEFAULT_MODEL)
 
@@ -236,6 +264,7 @@ class PlanExecuteHandler(BasePlanHandler):
         client = AsyncOpenAI(
             api_key=self._get_api_key(),
             base_url=effective_config.get("apiEndpoint", DEFAULT_API_ENDPOINT),
+            timeout=120.0,
         )
         model = effective_config.get("model", DEFAULT_MODEL)
         executor = AgentToolExecutor(root_dir=root_dir)

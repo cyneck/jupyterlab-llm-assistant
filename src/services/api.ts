@@ -87,11 +87,13 @@ export class LLMApiService {
   async chat(
     messages: Array<{ role: MessageRole; content: MessageContent }>,
     images?: string[],
-    settings?: LLMSettings
+    settings?: LLMSettings,
+    signal?: AbortSignal,
   ): Promise<ChatResponse> {
     const response = await fetch(`${this.baseUrl}/chat`, {
       method: 'POST',
       headers: getHeaders(),
+      signal,
       body: JSON.stringify({
         messages,
         images,
@@ -119,11 +121,13 @@ export class LLMApiService {
     messages: Array<{ role: MessageRole; content: MessageContent }>,
     images: string[] | undefined,
     onChunk: (chunk: string) => void,
-    settings?: LLMSettings
+    settings?: LLMSettings,
+    signal?: AbortSignal,
   ): Promise<void> {
     const response = await fetch(`${this.baseUrl}/chat`, {
       method: 'POST',
       headers: getHeaders(),
+      signal,
       body: JSON.stringify({
         messages,
         images,
@@ -496,6 +500,28 @@ export class LLMApiService {
     if (!r.ok) throw new Error(`Failed to save ASSISTANT.md: ${r.statusText}`);
   }
 
+  /** Get workspace config (per-project settings in .llm-assistant/config.json) */
+  async getWorkspaceConfig(rootDir = ''): Promise<{
+    config: Record<string, any>; path: string;
+  }> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/config${params}`, {
+      headers: getHeaders(),
+    });
+    if (!r.ok) throw new Error(`Failed to get workspace config: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Save workspace config (per-project settings in .llm-assistant/config.json) */
+  async setWorkspaceConfig(config: Record<string, any>, rootDir = ''): Promise<void> {
+    const r = await fetch(`${this.baseUrl}/workspace/config`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({ ...config, rootDir }),
+    });
+    if (!r.ok) throw new Error(`Failed to set workspace config: ${r.statusText}`);
+  }
+
   /** List saved sessions */
   async listSessions(rootDir = ''): Promise<Array<{
     id: string; summary: string; savedAt: number; mode: string; messageCount: number;
@@ -524,6 +550,19 @@ export class LLMApiService {
       body: JSON.stringify(session),
     });
     if (!r.ok) throw new Error(`Failed to save session: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Load a specific session */
+  async loadSession(id: string, rootDir = ''): Promise<{
+    id: string; summary: string; mode: string; messages: any[]; history: any[]; savedAt: number;
+  }> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(
+      `${this.baseUrl}/workspace/sessions/${encodeURIComponent(id)}${params}`,
+      { headers: getHeaders() },
+    );
+    if (!r.ok) throw new Error(`Failed to load session: ${r.statusText}`);
     return r.json();
   }
 

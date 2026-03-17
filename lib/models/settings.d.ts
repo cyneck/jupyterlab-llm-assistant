@@ -1,5 +1,7 @@
 /**
  * Settings model for managing LLM settings.
+ *
+ * Uses workspace config (.llm-assistant/config.json) for persistence.
  */
 import { Signal } from '@lumino/signaling';
 import { LLMSettings, ConnectionTestResult, ModelsResponse } from './types';
@@ -13,6 +15,7 @@ export declare const DEFAULT_SETTINGS: LLMSettings;
 export declare class SettingsModel {
     private _settings;
     private _apiService;
+    private _rootDir;
     /**
      * Signal emitted when settings change
      */
@@ -23,15 +26,20 @@ export declare class SettingsModel {
      */
     get settings(): LLMSettings;
     /**
+     * Set root directory for workspace config
+     */
+    setRootDir(rootDir: string): void;
+    /**
      * Update settings
      */
     updateSettings(updates: Partial<LLMSettings>): void;
     /**
-     * Load settings from server
+     * Load settings from workspace config (.llm-assistant/config.json)
      */
     loadSettings(): Promise<LLMSettings>;
     /**
-     * Save settings to server
+     * Save settings to workspace config (.llm-assistant/config.json)
+     * Also saves apiKey to server config_store if present
      */
     saveSettings(settings: Partial<LLMSettings>): Promise<void>;
     /**

@@ -72,6 +72,7 @@ class LLMClient:
             self._client = AsyncOpenAI(
                 api_key=self.config.api_key,
                 base_url=self.config.api_endpoint,
+                timeout=120.0,  # 120 seconds timeout for API calls
             )
         return self._client
 

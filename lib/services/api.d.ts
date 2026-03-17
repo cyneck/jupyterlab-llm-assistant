@@ -22,14 +22,14 @@ export declare class LLMApiService {
     chat(messages: Array<{
         role: MessageRole;
         content: MessageContent;
-    }>, images?: string[], settings?: LLMSettings): Promise<ChatResponse>;
+    }>, images?: string[], settings?: LLMSettings, signal?: AbortSignal): Promise<ChatResponse>;
     /**
      * Send a streaming chat request
      */
     streamChat(messages: Array<{
         role: MessageRole;
         content: MessageContent;
-    }>, images: string[] | undefined, onChunk: (chunk: string) => void, settings?: LLMSettings): Promise<void>;
+    }>, images: string[] | undefined, onChunk: (chunk: string) => void, settings?: LLMSettings, signal?: AbortSignal): Promise<void>;
     /**
      * Test the API connection
      */
@@ -139,6 +139,13 @@ export declare class LLMApiService {
     }>;
     /** Save ASSISTANT.md content */
     saveAssistantMd(content: string, rootDir?: string): Promise<void>;
+    /** Get workspace config (per-project settings in .llm-assistant/config.json) */
+    getWorkspaceConfig(rootDir?: string): Promise<{
+        config: Record<string, any>;
+        path: string;
+    }>;
+    /** Save workspace config (per-project settings in .llm-assistant/config.json) */
+    setWorkspaceConfig(config: Record<string, any>, rootDir?: string): Promise<void>;
     /** List saved sessions */
     listSessions(rootDir?: string): Promise<Array<{
         id: string;
@@ -157,6 +164,15 @@ export declare class LLMApiService {
         rootDir?: string;
     }): Promise<{
         id: string;
+    }>;
+    /** Load a specific session */
+    loadSession(id: string, rootDir?: string): Promise<{
+        id: string;
+        summary: string;
+        mode: string;
+        messages: any[];
+        history: any[];
+        savedAt: number;
     }>;
     /** Delete a session */
     deleteSession(id: string, rootDir?: string): Promise<void>;
