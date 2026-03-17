@@ -14,7 +14,8 @@
  */
 import React from 'react';
 import { ImageData } from '../models/types';
-import type { AppMode } from './ChatPanel';
+import type { MessageMode } from '../models/types';
+type AppMode = MessageMode;
 /** A path chip that the user has explicitly confirmed via the @ picker */
 export interface AttachedPath {
     id: string;

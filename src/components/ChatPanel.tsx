@@ -1,31 +1,21 @@
 /**
- * ChatPanel — Unified shell for Chat / Agent / Plan modes.
+ * ChatPanel — Unified message stream with mode-based handlers.
  *
- * v0.7.0 redesign:
- * - All three modes share a SINGLE unified context: the InputArea at the
- *   bottom is always visible regardless of mode.  Switching mode just changes
- *   the message-display viewport above — no page navigation required.
- * - ContextFilePanel removed; file/dir references are handled inline via the
- *   @ mention picker and path chips in InputArea.
- * - Attached paths (from @ picker) are forwarded to the active mode handler
- *   which reads the file contents before sending to the LLM.
- * - .llm-assistant workspace directory support added (session history,
- *   ASSISTANT.md, per-project config, future skill loading).
+ * New design (v0.8.0):
+ * - Single unified message list (no mode switching panels)
+ * - Chat/Agent/Plan are message HANDLERS, not separate panels
+ * - Mode selector only controls how the NEXT message is processed
+ * - All messages persist in one history (survives mode switches)
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { LLMSettings, ImageData, ConnectionTestResult } from '../models/types';
-import { ChatModel } from '../models/chat';
+import { LLMSettings, ImageData, ConnectionTestResult, UnifiedMessage, MessageMode, MessageToolCall } from '../models/types';
 import { SettingsModel } from '../models/settings';
-import { MessageList } from './MessageList';
 import { InputArea, AttachedPath } from './InputArea';
 import { SettingsPanel } from './SettingsPanel';
-import { AgentPanel } from './AgentPanel';
-import { PlanPanel } from './PlanPanel';
 import { MemoryPanel } from './MemoryPanel';
+import { UnifiedMessageList } from './UnifiedMessageList';
 import { LLMApiService } from '../services/api';
-
-export type AppMode = 'chat' | 'agent' | 'plan';
 
 export interface ChatPanelProps {
   settings: LLMSettings;
@@ -33,23 +23,33 @@ export interface ChatPanelProps {
 }
 
 const MODE_STORAGE_KEY = 'jlab-llm-mode';
+const MESSAGES_STORAGE_KEY = 'jlab-llm-messages';
 
-function loadSavedMode(): AppMode {
+function loadSavedMode(): MessageMode {
   try {
     const raw = localStorage.getItem(MODE_STORAGE_KEY);
     if (raw === 'agent' || raw === 'plan' || raw === 'chat') return raw;
   } catch { /* ignore */ }
-  return 'chat';
+  return 'agent';
+}
+
+function loadSavedMessages(): UnifiedMessage[] {
+  try {
+    const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveMessages(messages: UnifiedMessage[]) {
+  try {
+    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages.slice(-100)));
+  } catch { /* ignore */ }
 }
 
 const _api = new LLMApiService();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Given a list of AttachedPath chips, fetch their content from the backend
- * and format as a context block to prepend to the message.
- */
 async function buildContextFromAttachments(
   paths: AttachedPath[],
   rootDir: string,
@@ -59,7 +59,6 @@ async function buildContextFromAttachments(
   const allPaths: string[] = [];
   for (const a of paths) {
     if (a.isDir) {
-      // Resolve directory to file list
       try {
         const res = await _api.resolveContextPath(a.path, rootDir);
         allPaths.push(...res.paths.slice(0, 20));
@@ -85,110 +84,336 @@ async function buildContextFromAttachments(
   }
 }
 
+function uid(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [currentSettings, setCurrentSettings] = useState<LLMSettings>(settings);
-  const [mode, setMode] = useState<AppMode>(loadSavedMode);
+  const [sendMode, setSendMode] = useState<MessageMode>(loadSavedMode);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [rootDir, setRootDir] = useState('');
 
-  // ── Per-mode "pending send" state ──────────────────────────────────────────
-  // When mode ≠ 'chat', a sent message is queued here and picked up by the
-  // active mode panel (AgentPanel / PlanPanel) via prop.
-  const [pendingAgentSend, setPendingAgentSend] = useState<{
-    text: string;
-    contextText: string;
-    seq: number;
-  } | null>(null);
-  const [pendingPlanSend, setPendingPlanSend] = useState<{
-    text: string;
-    contextText: string;
-    seq: number;
-  } | null>(null);
-
-  // Chat model refs
-  const chatModelRef = useRef<ChatModel | null>(null);
-  const settingsModelRef = useRef<SettingsModel | null>(null);
-
-  // Chat mode state
-  const [messages, setMessages] = useState(chatModelRef.current?.messages || []);
-  const [isLoading, setIsLoading] = useState(false);
+  // Unified message state
+  const [messages, setMessages] = useState<UnifiedMessage[]>(loadSavedMessages);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Initialize models ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!chatModelRef.current) {
-      chatModelRef.current = new ChatModel(currentSettings);
-      settingsModelRef.current = new SettingsModel(currentSettings);
+  const settingsModelRef = useRef<SettingsModel | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
+  // ── Initialize ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!settingsModelRef.current) {
+      settingsModelRef.current = new SettingsModel(currentSettings);
       settingsModelRef.current.loadSettings().then((loaded) => {
         setCurrentSettings(loaded);
-        chatModelRef.current?.updateSettings(loaded);
       });
-
-      chatModelRef.current.messagesChanged.connect((_, msgs) => setMessages([...msgs]));
-      chatModelRef.current.loadingChanged.connect((_, loading) => setIsLoading(loading));
-      chatModelRef.current.errorChanged.connect((_, err) => setError(err));
     }
 
-    // Fetch the server's cwd for @ mention root via workspace info
     _api.getWorkspaceInfo('').then(info => {
       setRootDir(info.rootDir || '');
     }).catch(() => {
-      // Fallback: empty string means backend uses os.getcwd()
       setRootDir('');
     });
   }, []);
 
+  // Persist messages
   useEffect(() => {
-    chatModelRef.current?.updateSettings(currentSettings);
-  }, [currentSettings]);
+    saveMessages(messages);
+  }, [messages]);
 
-  // ── Mode switching ─────────────────────────────────────────────────────────
-  const handleModeChange = useCallback((m: AppMode) => {
-    setMode(m);
+  // ── Mode switching (only affects send handler) ────────────────────────────
+  const handleModeChange = useCallback((m: MessageMode) => {
+    setSendMode(m);
     try { localStorage.setItem(MODE_STORAGE_KEY, m); } catch { /* ignore */ }
-    setShowSettings(false);
-    setShowMemory(false);
   }, []);
 
-  // ── Unified send handler — routes to the active mode ──────────────────────
+  // ── Message handlers ───────────────────────────────────────────────────────
+  const addMessage = useCallback((msg: Omit<UnifiedMessage, 'id' | 'timestamp'>): UnifiedMessage => {
+    const fullMsg: UnifiedMessage = {
+      ...msg,
+      id: uid(),
+      timestamp: Date.now(),
+    };
+    setMessages(prev => [...prev, fullMsg]);
+    return fullMsg;
+  }, []);
+
+  const updateMessage = useCallback((id: string, updates: Partial<UnifiedMessage>) => {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+  }, []);
+
+  // ── Chat handler ───────────────────────────────────────────────────────────
+  const handleChatSend = useCallback(async (text: string, images: ImageData[], contextText: string) => {
+    const fullText = contextText ? `${contextText}${text}` : text;
+
+    // Add user message
+    addMessage({ role: 'user', content: text, mode: 'chat', images });
+
+    setIsProcessing(true);
+    setError(null);
+
+    // Build API messages from history
+    const apiMessages = messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role, content: m.content }));
+    apiMessages.push({ role: 'user', content: fullText });
+
+    const imageDataUrls = images.map(img => img.dataUrl);
+
+    try {
+      if (currentSettings.enableStreaming) {
+        const assistantMsg = addMessage({ role: 'assistant', content: '', mode: 'chat', isStreaming: true });
+
+        await _api.streamChat(
+          apiMessages,
+          imageDataUrls.length > 0 ? imageDataUrls : undefined,
+          (chunk: string) => {
+            setMessages(prev => {
+              const idx = prev.findIndex(m => m.id === assistantMsg.id);
+              if (idx === -1) return prev;
+              const next = [...prev];
+              next[idx] = { ...next[idx], content: next[idx].content + chunk };
+              return next;
+            });
+          },
+          currentSettings
+        );
+
+        updateMessage(assistantMsg.id, { isStreaming: false });
+      } else {
+        const response = await _api.chat(
+          apiMessages,
+          imageDataUrls.length > 0 ? imageDataUrls : undefined,
+          currentSettings
+        );
+        addMessage({ role: 'assistant', content: response.content, mode: 'chat' });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'An error occurred';
+      setError(msg);
+      addMessage({ role: 'assistant', content: `Error: ${msg}`, mode: 'chat', error: msg });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [messages, currentSettings, addMessage, updateMessage]);
+
+  // ── Agent handler ──────────────────────────────────────────────────────────
+  const handleAgentSend = useCallback(async (text: string, contextText: string) => {
+    const fullText = contextText ? `${contextText}${text}` : text;
+
+    // Add user message
+    addMessage({ role: 'user', content: text, mode: 'agent' });
+
+    setIsProcessing(true);
+    setError(null);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // Build conversation history
+    const history = messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }));
+    history.push({ role: 'user', content: fullText });
+
+    let assistantMsgId = uid();
+    let currentContent = '';
+    const toolMsgMap: Record<string, string> = {};
+
+    try {
+      await _api.runAgent(
+        history,
+        (event) => {
+          switch (event.type) {
+            case 'text': {
+              const chunk = event.data?.content || '';
+              currentContent += chunk;
+              setMessages(prev => {
+                const idx = prev.findIndex(m => m.id === assistantMsgId);
+                if (idx === -1) {
+                  return [...prev, {
+                    id: assistantMsgId,
+                    role: 'assistant',
+                    content: currentContent,
+                    mode: 'agent',
+                    timestamp: Date.now(),
+                    isStreaming: true,
+                    toolCalls: [],
+                  }];
+                }
+                const next = [...prev];
+                next[idx] = { ...next[idx], content: currentContent, isStreaming: true };
+                return next;
+              });
+              break;
+            }
+
+            case 'tool_call': {
+              const { id: toolId, name, args } = event.data;
+              const toolUid = uid();
+              toolMsgMap[toolId] = toolUid;
+
+              setMessages(prev => {
+                const assistantIdx = prev.findIndex(m => m.id === assistantMsgId);
+                const toolCall: MessageToolCall = {
+                  id: toolUid,
+                  name,
+                  args,
+                  status: 'running',
+                  startTime: Date.now(),
+                };
+
+                if (assistantIdx === -1) {
+                  // Create assistant message with tool call
+                  return [...prev, {
+                    id: assistantMsgId,
+                    role: 'assistant',
+                    content: currentContent,
+                    mode: 'agent',
+                    timestamp: Date.now(),
+                    toolCalls: [toolCall],
+                  }];
+                } else {
+                  const next = [...prev];
+                  const existing = next[assistantIdx].toolCalls || [];
+                  next[assistantIdx] = { ...next[assistantIdx], toolCalls: [...existing, toolCall] };
+                  return next;
+                }
+              });
+              break;
+            }
+
+            case 'tool_result': {
+              const { id: toolId, success, output } = event.data;
+              const msgId = toolMsgMap[toolId];
+              if (!msgId) break;
+
+              setMessages(prev => {
+                const assistantIdx = prev.findIndex(m => m.id === assistantMsgId);
+                if (assistantIdx === -1) return prev;
+
+                const next = [...prev];
+                const toolCalls = next[assistantIdx].toolCalls || [];
+                next[assistantIdx] = {
+                  ...next[assistantIdx],
+                  toolCalls: toolCalls.map(tc =>
+                    tc.id === msgId
+                      ? { ...tc, status: success ? 'success' : 'error', result: { success, output }, endTime: Date.now() }
+                      : tc
+                  ),
+                };
+                return next;
+              });
+              break;
+            }
+
+            case 'done': {
+              updateMessage(assistantMsgId, { isStreaming: false });
+              break;
+            }
+
+            case 'error': {
+              setError(event.data?.message || 'An error occurred');
+              updateMessage(assistantMsgId, { isStreaming: false });
+              break;
+            }
+          }
+        },
+        rootDir || undefined,
+        currentSettings,
+        20,
+        controller.signal,
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [messages, currentSettings, rootDir, addMessage, updateMessage]);
+
+  // ── Plan handler ───────────────────────────────────────────────────────────
+  const handlePlanSend = useCallback(async (text: string, contextText: string) => {
+    const fullText = contextText ? `${contextText}${text}` : text;
+
+    // Add user message
+    addMessage({ role: 'user', content: text, mode: 'plan' });
+
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      let planContent = '';
+      await _api.generatePlan(
+        fullText,
+        (event) => {
+          if (event.type === 'text') {
+            planContent += event.data?.content || '';
+          } else if (event.type === 'plan') {
+            const steps = event.data?.steps || [];
+            addMessage({
+              role: 'assistant',
+              content: planContent,
+              mode: 'plan',
+              planSteps: steps,
+            });
+            setIsProcessing(false);
+          } else if (event.type === 'error') {
+            setError(event.data?.message || 'Plan generation failed');
+            setIsProcessing(false);
+          }
+        },
+        contextText,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'An error occurred';
+      setError(msg);
+      setIsProcessing(false);
+    }
+  }, [addMessage]);
+
+  // ── Unified send handler ───────────────────────────────────────────────────
   const handleSend = useCallback(async (
     text: string,
     images: ImageData[],
     attachedPaths: AttachedPath[],
   ) => {
-    if (!chatModelRef.current) return;
-
-    // Build context string from attached paths
     const contextText = await buildContextFromAttachments(attachedPaths, rootDir);
-    const fullText = contextText ? `${contextText}${text}` : text;
 
-    if (mode === 'chat') {
-      try {
-        await chatModelRef.current.sendMessage(fullText, images, undefined);
-      } catch (err) {
-        console.error('Failed to send message:', err);
-      }
-    } else if (mode === 'agent') {
-      setPendingAgentSend(prev => ({
-        text: fullText,
-        contextText,
-        seq: (prev?.seq ?? 0) + 1,
-      }));
-    } else if (mode === 'plan') {
-      setPendingPlanSend(prev => ({
-        text: fullText,
-        contextText,
-        seq: (prev?.seq ?? 0) + 1,
-      }));
+    switch (sendMode) {
+      case 'chat':
+        await handleChatSend(text, images, contextText);
+        break;
+      case 'agent':
+        await handleAgentSend(text, contextText);
+        break;
+      case 'plan':
+        await handlePlanSend(text, contextText);
+        break;
     }
-  }, [mode, rootDir]);
+  }, [sendMode, rootDir, handleChatSend, handleAgentSend, handlePlanSend]);
 
-  const handleClear = useCallback(() => chatModelRef.current?.clear(), []);
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+  }, []);
+
+  const handleClear = useCallback(() => {
+    setMessages([]);
+    setError(null);
+    try { localStorage.removeItem(MESSAGES_STORAGE_KEY); } catch { /* ignore */ }
+  }, []);
 
   // ── Settings handlers ──────────────────────────────────────────────────────
   const handleSettingsChange = useCallback(async (newSettings: Partial<LLMSettings>) => {
@@ -212,15 +437,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     }
   }, [currentSettings]);
 
-  // ── Panel toggles ──────────────────────────────────────────────────────────
-  const handleOpenSettings = useCallback(() => {
-    setShowSettings(true);
-    setShowMemory(false);
+  // ── Plan step editing ──────────────────────────────────────────────────────
+  const handleEditPlanStep = useCallback((messageId: string, stepId: number, title: string, desc: string) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId || !m.planSteps) return m;
+      return {
+        ...m,
+        planSteps: m.planSteps.map(s => s.id === stepId ? { ...s, title, description: desc } : s),
+      };
+    }));
   }, []);
 
-  const handleToggleMemory = useCallback(() => {
-    setShowMemory(v => !v);
-    setShowSettings(false);
+  const handleSkipPlanStep = useCallback((messageId: string, stepId: number) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId || !m.planSteps) return m;
+      return {
+        ...m,
+        planSteps: m.planSteps.map(s => s.id === stepId ? { ...s, status: 'skipped' } : s),
+      };
+    }));
   }, []);
 
   const hasApiKey = currentSettings.hasApiKey ||
@@ -231,34 +466,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     <div className="llm-chat-header">
       <h3>LLM Assistant</h3>
       <div className="llm-header-actions">
-        {/* Memory */}
         <button
           className={`llm-header-btn ${showMemory ? 'active' : ''}`}
-          onClick={handleToggleMemory}
-          title="Memory — persistent context injected into every conversation"
+          onClick={() => setShowMemory(v => !v)}
+          title="Memory"
         >
           <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
           </svg>
         </button>
-
-        {/* Clear (chat mode only) */}
-        {mode === 'chat' && !showSettings && !showMemory && (
-          <button
-            className="llm-header-btn"
-            onClick={handleClear}
-            title="Clear chat"
-          >
+        {!showSettings && !showMemory && (
+          <button className="llm-header-btn" onClick={handleClear} title="Clear chat">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
             </svg>
           </button>
         )}
-
-        {/* Settings */}
         <button
           className={`llm-header-btn ${showSettings ? 'active' : ''}`}
-          onClick={handleOpenSettings}
+          onClick={() => setShowSettings(true)}
           title="Settings"
         >
           <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
@@ -269,7 +495,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     </div>
   );
 
-  // ── Side panel overlays ────────────────────────────────────────────────────
+  // ── Side panels ────────────────────────────────────────────────────────────
   if (showSettings) {
     return (
       <div className="llm-chat-panel">
@@ -295,66 +521,54 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   }
 
   // ── Main layout ────────────────────────────────────────────────────────────
-  // All modes render the same InputArea at the bottom.
-  // The message viewport above changes depending on mode.
-
   return (
     <div className="llm-chat-panel llm-unified-panel">
       {header}
 
-      {/* ── Mode viewport ──────────────────────────────────────────────── */}
       <div className="llm-mode-viewport">
-        {mode === 'chat' && (
-          <>
-            {error && (
-              <div className="llm-error-banner">
-                <span>{error}</span>
-                <button onClick={() => setError(null)}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                  </svg>
-                </button>
-              </div>
-            )}
-            <div className="llm-model-indicator">
-              <span className="llm-model-name">{currentSettings.model}</span>
-              {!hasApiKey && (
-                <span className="llm-api-warning">API Key not set</span>
-              )}
-            </div>
-            <MessageList messages={messages} isLoading={isLoading} />
-          </>
+        {error && (
+          <div className="llm-error-banner">
+            <span>{error}</span>
+            <button onClick={() => setError(null)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
+            </button>
+          </div>
         )}
 
-        {mode === 'agent' && (
-          <AgentPanel
-            settings={currentSettings}
-            mode={mode}
-            onModeChange={handleModeChange}
-            pendingSend={pendingAgentSend}
-            onPendingConsumed={() => setPendingAgentSend(null)}
-          />
-        )}
+        <div className="llm-model-indicator">
+          <span className="llm-model-name">{currentSettings.model}</span>
+          <span className="llm-mode-badge">{sendMode === 'chat' ? 'Chat' : sendMode === 'agent' ? 'Agent' : 'Plan'}</span>
+          {!hasApiKey && <span className="llm-api-warning">API Key not set</span>}
+        </div>
 
-        {mode === 'plan' && (
-          <PlanPanel
-            settings={currentSettings}
-            mode={mode}
-            onModeChange={handleModeChange}
-            pendingSend={pendingPlanSend}
-            onPendingConsumed={() => setPendingPlanSend(null)}
-          />
-        )}
+        <UnifiedMessageList
+          messages={messages}
+          isLoading={isProcessing}
+          onEditPlanStep={handleEditPlanStep}
+          onSkipPlanStep={handleSkipPlanStep}
+        />
       </div>
 
-      {/* ── Unified InputArea — always visible ────────────────────────── */}
+      {/* Running indicator */}
+      {isProcessing && (
+        <div className="agent-running-bar">
+          <span className="agent-thinking-dots"><span /><span /><span /></span>
+          <span className="agent-thinking-label">Processing...</span>
+          <button className="agent-stop-btn" onClick={handleStop}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M6 6h12v12H6z" />
+            </svg>
+            Stop
+          </button>
+        </div>
+      )}
+
       <InputArea
         onSend={handleSend}
-        disabled={
-          (mode === 'chat' && isLoading) ||
-          !hasApiKey
-        }
-        mode={mode}
+        disabled={isProcessing || !hasApiKey}
+        mode={sendMode}
         onModeChange={handleModeChange}
         rootDir={rootDir}
       />
@@ -363,32 +577,3 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
 };
 
 export default ChatPanel;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TODO: Skill System (future feature)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// Planned implementation inspired by Claude Code's skill / tool registry:
-//
-// 1. Skill Registry Panel (new component: SkillsPanel.tsx)
-//    - Fetches the official Claude Code skill repository index from:
-//      https://github.com/anthropics/claude-code/tree/main/skills  (or similar)
-//    - Displays a marketplace-style list: name, description, author, install button
-//    - Installed skills persisted in ~/.jupyter/llm_assistant_skills.json
-//
-// 2. Backend endpoint (skill_handler.py)
-//    POST /llm-assistant/skills/install   { name, url }  → clone / fetch YAML
-//    GET  /llm-assistant/skills           → list installed skills
-//    DELETE /llm-assistant/skills/:name   → remove
-//
-// 3. Skill execution
-//    - Each skill is a YAML manifest: { name, description, tools: [...], prompt: "..." }
-//    - On "use skill X" command in chat/agent, inject the skill's system-prompt fragment
-//      and register its custom tools with the agent_loop before the run starts.
-//    - Skills can extend the tool registry with arbitrary Python callables (sandboxed).
-//
-// 4. UI entry point
-//    - New header button "Skills" (⚡ icon) opens SkillsPanel overlay.
-//    - In the @ mention menu, skills appear as a special category: @skill:<name>
-//
-// ─────────────────────────────────────────────────────────────────────────────

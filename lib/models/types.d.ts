@@ -25,9 +25,50 @@ export interface ImageContent {
  * Message content can be a string or an array of content parts
  */
 export type MessageContent = string | (TextContent | ImageContent)[];
+export type MessageMode = 'chat' | 'agent' | 'plan';
 /**
- * Chat message
+ * Tool call entry embedded in a message
  */
+export interface MessageToolCall {
+    id: string;
+    name: string;
+    args: Record<string, any>;
+    status: 'pending' | 'running' | 'success' | 'error';
+    result?: {
+        success: boolean;
+        output: string;
+    };
+    startTime?: number;
+    endTime?: number;
+}
+/**
+ * Plan step embedded in a message
+ */
+export interface MessagePlanStep {
+    id: number;
+    title: string;
+    description: string;
+    status: 'pending' | 'running' | 'completed' | 'error' | 'skipped';
+}
+/**
+ * Unified message type - all modes share the same message list
+ */
+export interface UnifiedMessage {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    mode: MessageMode;
+    timestamp: number;
+    isStreaming?: boolean;
+    error?: string;
+    toolCalls?: MessageToolCall[];
+    iteration?: {
+        current: number;
+        max: number;
+    };
+    planSteps?: MessagePlanStep[];
+    images?: ImageData[];
+}
 export interface ChatMessage {
     id: string;
     role: MessageRole;

@@ -246,3 +246,83 @@ python -c "import yaml; print('yaml ok:', yaml.__version__)"
    username = __token__
    password = pypi-xxxxxxxxxxxx
    ```
+
+---
+
+## 运行时故障排除
+
+### API 404 错误（测试连接失败）
+
+**症状**: 前端显示 "✗ Error: Failed to set config: Not Found"，浏览器网络请求返回 404。
+
+**原因**: 服务器扩展（Server Extension）未正确加载。
+
+**诊断步骤**:
+
+```bash
+# 1. 检查服务器扩展状态
+jupyter server extension list | grep llm-assistant
+# 应显示: jupyterlab_llm_assistant enabled OK
+
+# 2. 验证扩展可导入（捕获 ImportError）
+python -c "from jupyterlab_llm_assistant.serverextension import load_jupyter_server_extension"
+# 如果失败，查看具体错误
+
+# 3. 查看 Jupyter 启动日志
+grep -i llm /path/to/jupyter.log
+# 应看到:
+# - jupyterlab_llm_assistant | extension was successfully linked
+# - Loading JupyterLab LLM Assistant extension v0.x.x
+```
+
+**修复方法**:
+
+```bash
+# 方法1: 自动启用
+jupyter server extension enable --py jupyterlab_llm_assistant --sys-prefix
+
+# 方法2: 手动创建配置文件
+mkdir -p $(jupyter --config-dir)/jupyter_server_config.d
+cat > $(jupyter --config-dir)/jupyter_server_config.d/jupyterlab_llm_assistant.json << 'EOF'
+{
+  "ServerApp": {
+    "jpserver_extensions": {
+      "jupyterlab_llm_assistant": true
+    }
+  }
+}
+EOF
+
+# 重启 JupyterLab
+pkill -f "jupyter-lab"
+jupyter lab
+```
+
+### 导入错误导致扩展加载失败
+
+**症状**: Jupyter 启动无报错，但扩展未加载，API 返回 404。
+
+**原因**: 代码中存在导入错误（如导入未声明的依赖），导致 `jupyterlab_llm_assistant` 模块加载失败。
+
+**示例**:
+```python
+# llm_client.py 中导入未使用的模块
+import aiohttp  # 不在 pyproject.toml 依赖中
+```
+
+**修复**:
+1. 移除未使用的导入
+2. 重新安装: `pip install -e . --force-reinstall --no-deps`
+3. 重启 JupyterLab
+
+### 扩展加载但前端无法访问
+
+**症状**: `jupyter server extension list` 显示 enabled，但前端报错。
+
+**检查**:
+```bash
+# 测试 API 是否可达（需替换 token）
+curl http://localhost:8888/llm-assistant/config?token=YOUR_TOKEN
+
+# 应返回 JSON 配置，而非 404
+```

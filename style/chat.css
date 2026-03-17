@@ -1644,3 +1644,186 @@ body[data-jp-theme-light='false'] .llm-mention-item.active {
   background-color: var(--jp-layout-color1);
 }
 
+
+/* ==============================================================================
+   Unified Message List (v0.8.0)
+   ============================================================================== */
+
+/* Mode badges for messages */
+.llm-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--jp-layout-color3);
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-mode-badge-chat {
+  background: var(--jp-brand-color3, #e3f2fd);
+  color: var(--jp-brand-color1, #1976d2);
+}
+
+.llm-mode-badge-agent {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.llm-mode-badge-plan {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+body[data-jp-theme-light='false'] .llm-mode-badge-chat {
+  background: #1e3a5f;
+  color: var(--jp-brand-color1, #42a5f5);
+}
+
+body[data-jp-theme-light='false'] .llm-mode-badge-agent {
+  background: #1b3d1b;
+  color: #81c784;
+}
+
+body[data-jp-theme-light='false'] .llm-mode-badge-plan {
+  background: #3d2815;
+  color: #ffb74d;
+}
+
+/* Agent message content */
+.llm-message-agent-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.llm-message-tool-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.llm-message-iteration {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-iteration-badge {
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+  background: var(--jp-layout-color2);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* Plan message content */
+.llm-message-plan-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.llm-message-plan-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Mode viewport (unified panel) */
+.llm-mode-viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.llm-model-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--jp-layout-color2);
+  border-bottom: 1px solid var(--jp-border-color0);
+  font-size: 12px;
+}
+
+.llm-model-name {
+  font-weight: 600;
+  color: var(--jp-ui-font-color0);
+}
+
+.llm-api-warning {
+  color: var(--jp-error-color1);
+  font-size: 11px;
+}
+
+/* Unified panel */
+.llm-unified-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Thinking dots for loading */
+.llm-thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.llm-thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--jp-ui-font-color2);
+  animation: llm-thinking-bounce 1.4s ease-in-out infinite both;
+}
+
+.llm-thinking-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.llm-thinking-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes llm-thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Error banner */
+.llm-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+  font-size: 13px;
+}
+
+.llm-error-banner button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Message loading state */
+.llm-message-loading {
+  opacity: 0.7;
+}

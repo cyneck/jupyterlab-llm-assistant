@@ -1,20 +1,14 @@
 /**
- * ChatPanel — Unified shell for Chat / Agent / Plan modes.
+ * ChatPanel — Unified message stream with mode-based handlers.
  *
- * v0.7.0 redesign:
- * - All three modes share a SINGLE unified context: the InputArea at the
- *   bottom is always visible regardless of mode.  Switching mode just changes
- *   the message-display viewport above — no page navigation required.
- * - ContextFilePanel removed; file/dir references are handled inline via the
- *   @ mention picker and path chips in InputArea.
- * - Attached paths (from @ picker) are forwarded to the active mode handler
- *   which reads the file contents before sending to the LLM.
- * - .llm-assistant workspace directory support added (session history,
- *   ASSISTANT.md, per-project config, future skill loading).
+ * New design (v0.8.0):
+ * - Single unified message list (no mode switching panels)
+ * - Chat/Agent/Plan are message HANDLERS, not separate panels
+ * - Mode selector only controls how the NEXT message is processed
+ * - All messages persist in one history (survives mode switches)
  */
 import React from 'react';
 import { LLMSettings } from '../models/types';
-export type AppMode = 'chat' | 'agent' | 'plan';
 export interface ChatPanelProps {
     settings: LLMSettings;
     onOpenSettings: () => void;

@@ -264,6 +264,10 @@ npm run build
 # 5. 验证扩展注册
 pip install -e .
 jupyter labextension list | grep llm-assistant
+jupyter server extension list | grep llm-assistant  # 验证服务器扩展
+
+# 6. 验证服务器扩展可导入（捕获导入错误）
+python -c "from jupyterlab_llm_assistant.serverextension import load_jupyter_server_extension"
 ```
 
 ### 推送规范
@@ -273,7 +277,9 @@ jupyter labextension list | grep llm-assistant
 1. 所有后端测试全部通过（`0 失败`）
 2. 前端构建无 TypeScript 错误
 3. `jupyter labextension list` 显示 `enabled OK`
-4. 同步更新 `docs/` 及 `README.md` 中涉及的功能变更
+4. `jupyter server extension list` 显示 `jupyterlab_llm_assistant enabled OK`
+5. `python -c "from jupyterlab_llm_assistant.serverextension import load_jupyter_server_extension"` 执行成功（无导入错误）
+6. 同步更新 `docs/` 及 `README.md` 中涉及的功能变更
 
 ---
 

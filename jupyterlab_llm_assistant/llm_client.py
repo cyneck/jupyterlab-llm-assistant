@@ -9,7 +9,6 @@ import json
 import asyncio
 from typing import AsyncGenerator, List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
-import aiohttp
 from openai import AsyncOpenAI
 
 

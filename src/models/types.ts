@@ -30,9 +30,59 @@ export interface ImageContent {
  */
 export type MessageContent = string | (TextContent | ImageContent)[];
 
+// ============================================================
+// Unified message types (new design: modes are handlers, not panels)
+// ============================================================
+
+export type MessageMode = 'chat' | 'agent' | 'plan';
+
 /**
- * Chat message
+ * Tool call entry embedded in a message
  */
+export interface MessageToolCall {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+  status: 'pending' | 'running' | 'success' | 'error';
+  result?: {
+    success: boolean;
+    output: string;
+  };
+  startTime?: number;
+  endTime?: number;
+}
+
+/**
+ * Plan step embedded in a message
+ */
+export interface MessagePlanStep {
+  id: number;
+  title: string;
+  description: string;
+  status: 'pending' | 'running' | 'completed' | 'error' | 'skipped';
+}
+
+/**
+ * Unified message type - all modes share the same message list
+ */
+export interface UnifiedMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  mode: MessageMode;  // Which mode/handler was used
+  timestamp: number;
+  isStreaming?: boolean;
+  error?: string;
+  // Agent-specific fields
+  toolCalls?: MessageToolCall[];
+  iteration?: { current: number; max: number };
+  // Plan-specific fields
+  planSteps?: MessagePlanStep[];
+  // Images for user messages
+  images?: ImageData[];
+}
+
+// Legacy types kept for backwards compatibility
 export interface ChatMessage {
   id: string;
   role: MessageRole;

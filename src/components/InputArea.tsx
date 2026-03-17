@@ -22,7 +22,10 @@ import React, {
 } from 'react';
 import { ImageData } from '../models/types';
 import { LLMApiService } from '../services/api';
-import type { AppMode } from './ChatPanel';
+import type { MessageMode } from '../models/types';
+
+// Re-export for backwards compatibility
+type AppMode = MessageMode;
 
 // ── @ mention helpers ─────────────────────────────────────────────────────────
 
