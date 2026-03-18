@@ -1,6 +1,6 @@
 {
   "name": "jupyterlab-llm-assistant",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A JupyterLab extension for LLM-powered coding assistant with chat interface",
   "keywords": [
     "jupyter",
@@ -38,7 +38,7 @@
     "build:labextension": "jupyter labextension build .",
     "build:labextension:dev": "jupyter labextension build --development True .",
     "build:lib": "tsc",
-    "deploy": "rsync -a jupyterlab_llm_assistant/labextension/ \"$(jupyter --data-dir)/labextensions/jupyterlab-llm-assistant/\"",
+    "deploy": "node scripts/deploy.js",
     "clean": "jlpm run clean:lib",
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
     "clean:labextension": "rimraf jupyterlab_llm_assistant/labextension",
@@ -95,7 +95,7 @@
       "@jupyterlab/ui-components"
     ],
     "_build": {
-      "load": "static/remoteEntry.8752b7ff313247b7c752.js",
+      "load": "static/remoteEntry.43638d1e7745bb807e06.js",
       "extension": "./extension",
       "style": "./style"
     }

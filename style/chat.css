@@ -171,7 +171,7 @@ body[data-jp-theme-light='false'] .llm-context-indicator:hover {
 }
 
 /* ==============================================================================
-   Mode Selector (InputArea footer + Agent/PlanPanel footer)
+   Mode Selector (InputArea footer + AgentPanel footer)
    ============================================================================== */
 
 .llm-input-footer {
@@ -1614,7 +1614,7 @@ body[data-jp-theme-light='false'] .llm-mention-item.active {
   color: var(--jp-brand-color1);
 }
 
-/* ── Agent / Plan running bar (replaces inline input) ──────────────────── */
+/* ── Agent running bar (replaces inline input) ──────────────────── */
 
 .agent-running-bar {
   display: flex;
@@ -1647,13 +1647,8 @@ body[data-jp-theme-light='false'] .llm-mention-item.active {
   background-color: rgba(255, 152, 0, 0.1);
 }
 
-/* ── Plan action area (no internal textarea) ────────────────────────────── */
+/* ── Agent action area (no internal textarea) ────────────────────────────── */
 
-.plan-action-area {
-  flex-shrink: 0;
-  border-top: 1px solid var(--jp-border-color1);
-  background-color: var(--jp-layout-color1);
-}
 
 
 /* ==============================================================================
@@ -1680,11 +1675,6 @@ body[data-jp-theme-light='false'] .llm-mention-item.active {
 
 .llm-mode-badge-agent {
   background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.llm-mode-badge-plan {
-  background: #fff3e0;
   color: #e65100;
 }
 
@@ -1695,10 +1685,6 @@ body[data-jp-theme-light='false'] .llm-mode-badge-chat {
 
 body[data-jp-theme-light='false'] .llm-mode-badge-agent {
   background: #1b3d1b;
-  color: #81c784;
-}
-
-body[data-jp-theme-light='false'] .llm-mode-badge-plan {
   background: #3d2815;
   color: #ffb74d;
 }
@@ -1789,27 +1775,6 @@ body[data-jp-theme-light='false'] .llm-iteration-badge {
   border-radius: 50%;
   background: #22c55e;
   animation: none;
-}
-
-/* Plan message content */
-.llm-message-plan-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.llm-message-plan-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Mode viewport (unified panel) */
-.llm-mode-viewport {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .llm-model-indicator {
@@ -2005,10 +1970,6 @@ body[data-jp-theme-light='false'] .llm-iteration-badge {
   color: var(--jp-ui-inverse-font-color0);
 }
 
-.llm-session-mode.llm-mode-plan {
-  background: var(--jp-warning-color0);
-  color: var(--jp-ui-inverse-font-color0);
-}
 
 .llm-session-count {
   opacity: 0.8;

@@ -8,7 +8,6 @@
 @import './chat.css';
 @import './agent.css';
 @import './memory.css';
-@import './plan.css';
 
 /* Variables */
 :root {

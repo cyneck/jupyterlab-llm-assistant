@@ -53,16 +53,6 @@ export interface MessageToolCall {
 }
 
 /**
- * Plan step embedded in a message (deprecated - keeping for type compatibility)
- */
-export interface MessagePlanStep {
-  id: number;
-  title: string;
-  description: string;
-  status: 'pending' | 'running' | 'completed' | 'error' | 'skipped';
-}
-
-/**
  * Unified message type - all modes share the same message list
  */
 export interface UnifiedMessage {
@@ -76,8 +66,6 @@ export interface UnifiedMessage {
   // Agent-specific fields
   toolCalls?: MessageToolCall[];
   iteration?: { current: number; max: number };
-  // Deprecated plan-specific fields
-  planSteps?: MessagePlanStep[];
   // Images for user messages
   images?: ImageData[];
 }
@@ -370,18 +358,3 @@ export interface ContextState {
   rootDir: string;
 }
 
-// ============================================================
-// Plan mode types
-// ============================================================
-
-export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'error' | 'skipped';
-
-/**
- * A single step in an AI-generated plan
- */
-export interface PlanStep {
-  id: number;
-  title: string;
-  description: string;
-  status: PlanStepStatus;
-}

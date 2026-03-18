@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JupyterLab LLM Assistant is a JupyterLab 4 extension that provides an AI coding assistant in the sidebar with three modes: Chat, Agent, and Plan. The frontend is TypeScript/React and the backend is Python/Tornado integrated with Jupyter Server.
+JupyterLab LLM Assistant is a JupyterLab 4 extension that provides an AI coding assistant in the sidebar with Chat and Agent modes. The frontend is TypeScript/React and the backend is Python/Tornado integrated with Jupyter Server.
 
 ## Architecture
 
 ### Frontend (TypeScript/React)
 
 - **Entry point**: `src/index.ts` - Registers the JupyterLab plugin and creates the sidebar panel
-- **Components**: `src/components/` - React components including ChatPanel, AgentPanel, PlanPanel, and unified InputArea (v0.7.0)
+- **Components**: `src/components/` - React components including ChatPanel, AgentPanel, and unified InputArea (v0.7.0)
 - **Services**: `src/services/api.ts` - Frontend API client for all REST endpoints
 - **Models**: `src/models/` - TypeScript types and state management
 - **Build output**: `lib/` (compiled JS), `jupyterlab_llm_assistant/labextension/` (bundled extension)
@@ -23,7 +23,6 @@ JupyterLab LLM Assistant is a JupyterLab 4 extension that provides an AI coding 
 - **Handler modules**:
   - `agent_handler.py` - ReAct agent loop with SSE streaming
   - `agent_tools.py` - 7 tool implementations (read_file, write_file, edit_file, bash, list_dir, grep_search, notebook_execute)
-  - `plan_handler.py` - Plan generation and execution
   - `workspace_handler.py` - `.llm-assistant/` directory management (ASSISTANT.md, sessions, config.json, skills)
   - `context_handler.py` - File content reading and directory listing
   - `memory_handler.py` - Conversation memory persistence
@@ -147,9 +146,9 @@ Tools are defined in `agent_tools.py`:
 ### Frontend Component Structure
 
 The v0.8.0 unified panel uses a single message stream:
-- `ChatPanel.tsx` - Shell component managing all three modes with unified message state
+- `ChatPanel.tsx` - Shell component managing all modes with unified message state
 - `InputArea.tsx` - Unified text input with mode selector and @ file picker
-- `UnifiedMessageList.tsx` - Renders all message types (chat/agent/plan) in a single stream
+- `UnifiedMessageList.tsx` - Renders all message types (chat/agent) in a single stream
 - `ToolCallDisplay.tsx` - Visualizes agent tool calls in real-time
 
 ### Workspace Directory (`.llm-assistant/`)

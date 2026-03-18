@@ -1,9 +1,8 @@
 """
 Shared agent execution loop.
 
-Both AgentHandler and PlanExecuteHandler delegate to this single
-implementation to avoid duplication and guarantee consistent behaviour
-(tool handling, temperature propagation, SSE event names, etc.).
+AgentHandler delegates to this single implementation to ensure consistent
+behaviour (tool handling, temperature propagation, SSE event names, etc.).
 """
 
 import json
@@ -29,7 +28,7 @@ async def run_agent_loop(
     config_store: Dict[str, Any],
 ) -> None:
     """
-    Core agentic execution loop shared by AgentHandler and PlanExecuteHandler.
+    Core agentic execution loop.
 
     Repeatedly:
     1. Call the LLM with the current message list (streaming).
