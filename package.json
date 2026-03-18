@@ -1,6 +1,6 @@
 {
   "name": "jupyterlab-llm-assistant",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A JupyterLab extension for LLM-powered coding assistant with chat interface",
   "keywords": [
     "jupyter",
