@@ -1,5 +1,5 @@
 /**
- * InputArea — unified input block for Chat / Agent / Plan modes.
+ * InputArea — unified input block for Chat / Agent modes.
  *
  * v0.7.0 changes:
  * - Textarea grows from 120 px (min) to 400 px (max) — suitable for large inputs
@@ -406,9 +406,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
   // ── Mode label ────────────────────────────────────────────────────────────
   const modeLabel = useMemo<string>(() => {
-    if (mode === 'chat') return 'Chat';
-    if (mode === 'agent') return 'Agent';
-    return 'Plan';
+    return mode === 'chat' ? 'Chat' : 'Agent';
   }, [mode]);
 
   // ── Breadcrumb display ────────────────────────────────────────────────────
@@ -592,7 +590,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
           >
             <option value="chat">Chat</option>
             <option value="agent">Agent</option>
-            <option value="plan">Plan</option>
           </select>
           <svg
             className="llm-mode-select-chevron"

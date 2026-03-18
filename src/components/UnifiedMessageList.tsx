@@ -1,23 +1,19 @@
 /**
- * UnifiedMessageList — Renders all message types (chat/agent/plan) in a unified stream.
+ * UnifiedMessageList — Renders all messages in a unified stream.
  *
- * This component replaces the separate MessageList/AgentPanel/PlanPanel display
- * components. Each message renders according to its mode:
+ * Message types:
  * - chat: Simple text + images
- * - agent: Text with inline tool call visualization
- * - plan: Text with editable step cards
+ * - agent: Text with inline tool call visualization + iteration indicator
  */
 
 import React, { useRef, useEffect } from 'react';
-import { UnifiedMessage, MessageToolCall, MessagePlanStep } from '../models/types';
+import { UnifiedMessage, MessageToolCall } from '../models/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolCallDisplay } from './ToolCallDisplay';
 
 export interface UnifiedMessageListProps {
   messages: UnifiedMessage[];
   isLoading: boolean;
-  onEditPlanStep?: (messageId: string, stepId: number, title: string, desc: string) => void;
-  onSkipPlanStep?: (messageId: string, stepId: number) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -29,115 +25,6 @@ function formatTimestamp(timestamp: number): string {
     minute: '2-digit',
   });
 }
-
-function uid(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// ─── Plan Step Card ───────────────────────────────────────────────────────────
-
-interface PlanStepCardProps {
-  step: MessagePlanStep;
-  onEdit: (id: number, title: string, desc: string) => void;
-  onSkip: (id: number) => void;
-}
-
-const StatusIcon: React.FC<{ status: MessagePlanStep['status'] }> = ({ status }) => {
-  switch (status) {
-    case 'completed':
-      return (
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" style={{ color: 'var(--jp-success-color1, #4caf50)' }}>
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-        </svg>
-      );
-    case 'skipped':
-      return (
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" style={{ color: 'var(--jp-content-font-color3)' }}>
-          <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-        </svg>
-      );
-    default:
-      return (
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" style={{ color: 'var(--jp-content-font-color3)' }}>
-          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" fill="none" />
-        </svg>
-      );
-  }
-};
-
-const PlanStepCard: React.FC<PlanStepCardProps> = ({ step, onEdit, onSkip }) => {
-  const [editing, setEditing] = React.useState(false);
-  const [editTitle, setEditTitle] = React.useState(step.title);
-  const [editDesc, setEditDesc] = React.useState(step.description);
-
-  const handleSave = () => {
-    onEdit(step.id, editTitle.trim() || step.title, editDesc.trim() || step.description);
-    setEditing(false);
-  };
-
-  const handleCancel = () => {
-    setEditTitle(step.title);
-    setEditDesc(step.description);
-    setEditing(false);
-  };
-
-  return (
-    <div className={`plan-step-card plan-step-${step.status}`}>
-      <div className="plan-step-header">
-        <span className="plan-step-num">{step.id}</span>
-        <StatusIcon status={step.status} />
-        {editing ? (
-          <div className="plan-step-edit-area">
-            <input
-              className="plan-step-edit-title"
-              value={editTitle}
-              onChange={e => setEditTitle(e.target.value)}
-              placeholder="Step title"
-            />
-            <textarea
-              className="plan-step-edit-desc"
-              value={editDesc}
-              onChange={e => setEditDesc(e.target.value)}
-              rows={3}
-              placeholder="Step description"
-            />
-            <div className="plan-step-edit-actions">
-              <button className="plan-btn plan-btn-sm plan-btn-primary" onClick={handleSave}>Save</button>
-              <button className="plan-btn plan-btn-sm" onClick={handleCancel}>Cancel</button>
-            </div>
-          </div>
-        ) : (
-          <div className="plan-step-body">
-            <span className="plan-step-title">{step.title}</span>
-            <span className="plan-step-desc">{step.description}</span>
-          </div>
-        )}
-        {!editing && step.status !== 'skipped' && (
-          <div className="plan-step-actions">
-            <button
-              className="plan-step-action-btn"
-              onClick={() => setEditing(true)}
-              title="Edit step"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-              </svg>
-            </button>
-            <button
-              className="plan-step-action-btn"
-              onClick={() => onSkip(step.id)}
-              title="Mark as skipped"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-              </svg>
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 // ─── Message Content Renderers ────────────────────────────────────────────────
 
@@ -203,50 +90,13 @@ const AgentMessageContent: React.FC<AgentMessageContentProps> = ({ message }) =>
       {/* Iteration indicator */}
       {message.iteration && (
         <div className="llm-message-iteration">
-          <span className="llm-iteration-badge">
-            Iteration {message.iteration.current}/{message.iteration.max}
+          <span className={`llm-iteration-badge ${message.isStreaming ? 'llm-iteration-active' : 'llm-iteration-complete'}`}>
+            {message.isStreaming ? (
+              <>Thinking... ({message.iteration.current}/{message.iteration.max})</>
+            ) : (
+              <>Completed in {message.iteration.current} iterations</>
+            )}
           </span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface PlanMessageContentProps {
-  message: UnifiedMessage;
-  onEditStep?: (stepId: number, title: string, desc: string) => void;
-  onSkipStep?: (stepId: number) => void;
-}
-
-const PlanMessageContent: React.FC<PlanMessageContentProps> = ({ message, onEditStep, onSkipStep }) => {
-  return (
-    <div className="llm-message-plan-content">
-      {/* Plan description */}
-      {message.content && (
-        <div className="llm-message-text">
-          <MarkdownRenderer content={message.content} />
-        </div>
-      )}
-
-      {/* Plan steps */}
-      {message.planSteps && message.planSteps.length > 0 && (
-        <div className="llm-message-plan-steps">
-          <div className="plan-review-bar">
-            <span className="plan-review-hint">
-              Review and edit steps. Use Agent mode to execute this plan.
-            </span>
-          </div>
-          <div className="plan-steps-list">
-            {message.planSteps.map(step => (
-              <div key={step.id} className="plan-step-wrapper">
-                <PlanStepCard
-                  step={step}
-                  onEdit={onEditStep || (() => {})}
-                  onSkip={onSkipStep || (() => {})}
-                />
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -257,14 +107,10 @@ const PlanMessageContent: React.FC<PlanMessageContentProps> = ({ message, onEdit
 
 interface UnifiedMessageItemProps {
   message: UnifiedMessage;
-  onEditPlanStep?: (messageId: string, stepId: number, title: string, desc: string) => void;
-  onSkipPlanStep?: (messageId: string, stepId: number) => void;
 }
 
 const UnifiedMessageItem: React.FC<UnifiedMessageItemProps> = ({
   message,
-  onEditPlanStep,
-  onSkipPlanStep,
 }) => {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -275,7 +121,6 @@ const UnifiedMessageItem: React.FC<UnifiedMessageItemProps> = ({
     const labels: Record<string, string> = {
       chat: 'Chat',
       agent: 'Agent',
-      plan: 'Plan',
     };
     const icons: Record<string, React.ReactNode> = {
       chat: (
@@ -286,11 +131,6 @@ const UnifiedMessageItem: React.FC<UnifiedMessageItemProps> = ({
       agent: (
         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-        </svg>
-      ),
-      plan: (
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-          <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
         </svg>
       ),
     };
@@ -309,14 +149,6 @@ const UnifiedMessageItem: React.FC<UnifiedMessageItemProps> = ({
         return <ChatMessageContent message={message} />;
       case 'agent':
         return <AgentMessageContent message={message} />;
-      case 'plan':
-        return (
-          <PlanMessageContent
-            message={message}
-            onEditStep={onEditPlanStep ? (id, title, desc) => onEditPlanStep(message.id, id, title, desc) : undefined}
-            onSkipStep={onSkipPlanStep ? (id) => onSkipPlanStep(message.id, id) : undefined}
-          />
-        );
       default:
         return <ChatMessageContent message={message} />;
     }
@@ -384,8 +216,6 @@ const UnifiedMessageItem: React.FC<UnifiedMessageItemProps> = ({
 export const UnifiedMessageList: React.FC<UnifiedMessageListProps> = ({
   messages,
   isLoading,
-  onEditPlanStep,
-  onSkipPlanStep,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -408,7 +238,7 @@ export const UnifiedMessageList: React.FC<UnifiedMessageListProps> = ({
           </div>
           <p className="llm-empty-title">Start a conversation</p>
           <p className="llm-empty-hint">
-            Select a mode (Chat, Agent, or Plan) and send a message.
+            Select a mode (Chat or Agent) and send a message.
             <br />
             Use @ to reference files and directories.
           </p>
@@ -419,8 +249,6 @@ export const UnifiedMessageList: React.FC<UnifiedMessageListProps> = ({
         <UnifiedMessageItem
           key={message.id}
           message={message}
-          onEditPlanStep={onEditPlanStep}
-          onSkipPlanStep={onSkipPlanStep}
         />
       ))}
 

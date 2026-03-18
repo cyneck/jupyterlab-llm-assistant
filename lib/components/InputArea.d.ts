@@ -1,5 +1,5 @@
 /**
- * InputArea — unified input block for Chat / Agent / Plan modes.
+ * InputArea — unified input block for Chat / Agent modes.
  *
  * v0.7.0 changes:
  * - Textarea grows from 120 px (min) to 400 px (max) — suitable for large inputs

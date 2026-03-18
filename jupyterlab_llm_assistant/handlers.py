@@ -16,7 +16,6 @@ from .llm_client import LLMClient, LLMConfig
 from .agent_handler import AgentHandler
 from .memory_handler import MemoryListHandler, MemoryItemHandler, MemoryExportHandler
 from .context_handler import ContextReadHandler, ContextResolveHandler, ContextListDirHandler
-from .plan_handler import PlanGenerateHandler, PlanExecuteHandler
 from .workspace_handler import (
     WorkspaceInfoHandler,
     AssistantMdHandler,
@@ -280,12 +279,6 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
         (url_path_join(base_url, "/llm-assistant/context/read"), ContextReadHandler),
         (url_path_join(base_url, "/llm-assistant/context/resolve"), ContextResolveHandler),
         (url_path_join(base_url, "/llm-assistant/context/listdir"), ContextListDirHandler),
-    ]
-
-    # Plan mode routes
-    routes += [
-        (url_path_join(base_url, "/llm-assistant/plan/generate"), PlanGenerateHandler, {"config_store": config_store}),
-        (url_path_join(base_url, "/llm-assistant/plan/execute"), PlanExecuteHandler, {"config_store": config_store}),
     ]
 
     # .llm-assistant workspace routes (sessions, ASSISTANT.md, skills, per-project config)

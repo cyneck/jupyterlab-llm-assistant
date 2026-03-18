@@ -380,6 +380,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
               break;
             }
 
+            case 'iteration': {
+              const { current, max } = event.data;
+              setMessages(prev => {
+                const assistantIdx = prev.findIndex(m => m.id === assistantMsgId);
+                if (assistantIdx === -1) return prev;
+
+                const next = [...prev];
+                next[assistantIdx] = {
+                  ...next[assistantIdx],
+                  iteration: { current, max },
+                };
+                return next;
+              });
+              break;
+            }
+
             case 'done': {
               updateMessage(assistantMsgId, { isStreaming: false });
               break;
@@ -407,47 +423,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
     }
   }, [messages, currentSettings, rootDir, addMessage, updateMessage]);
 
-  // ── Plan handler ───────────────────────────────────────────────────────────
-  const handlePlanSend = useCallback(async (text: string, contextText: string) => {
-    const fullText = contextText ? `${contextText}${text}` : text;
-
-    // Add user message
-    addMessage({ role: 'user', content: text, mode: 'plan' });
-
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      let planContent = '';
-      await _api.generatePlan(
-        fullText,
-        (event) => {
-          if (event.type === 'text') {
-            planContent += event.data?.content || '';
-          } else if (event.type === 'plan') {
-            const steps = event.data?.steps || [];
-            addMessage({
-              role: 'assistant',
-              content: planContent,
-              mode: 'plan',
-              planSteps: steps,
-            });
-            setIsProcessing(false);
-          } else if (event.type === 'error') {
-            setError(event.data?.message || 'Plan generation failed');
-            setIsProcessing(false);
-          }
-        },
-        contextText,
-        currentSettings,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'An error occurred';
-      setError(msg);
-      setIsProcessing(false);
-    }
-  }, [addMessage, currentSettings]);
-
   // ── Unified send handler ───────────────────────────────────────────────────
   const handleSend = useCallback(async (
     text: string,
@@ -463,11 +438,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       case 'agent':
         await handleAgentSend(text, contextText);
         break;
-      case 'plan':
-        await handlePlanSend(text, contextText);
-        break;
     }
-  }, [sendMode, rootDir, handleChatSend, handleAgentSend, handlePlanSend]);
+  }, [sendMode, rootDir, handleChatSend, handleAgentSend]);
 
   const handleStop = useCallback(() => {
     if (abortControllerRef.current) {
@@ -540,27 +512,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       setIsTestingConnection(false);
     }
   }, [currentSettings]);
-
-  // ── Plan step editing ──────────────────────────────────────────────────────
-  const handleEditPlanStep = useCallback((messageId: string, stepId: number, title: string, desc: string) => {
-    setMessages(prev => prev.map(m => {
-      if (m.id !== messageId || !m.planSteps) return m;
-      return {
-        ...m,
-        planSteps: m.planSteps.map(s => s.id === stepId ? { ...s, title, description: desc } : s),
-      };
-    }));
-  }, []);
-
-  const handleSkipPlanStep = useCallback((messageId: string, stepId: number) => {
-    setMessages(prev => prev.map(m => {
-      if (m.id !== messageId || !m.planSteps) return m;
-      return {
-        ...m,
-        planSteps: m.planSteps.map(s => s.id === stepId ? { ...s, status: 'skipped' } : s),
-      };
-    }));
-  }, []);
 
   const hasApiKey = currentSettings.hasApiKey ||
     (currentSettings.apiKey && currentSettings.apiKey.length > 0);
@@ -667,15 +618,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
 
         <div className="llm-model-indicator">
           <span className="llm-model-name">{currentSettings.model}</span>
-          <span className="llm-mode-badge">{sendMode === 'chat' ? 'Chat' : sendMode === 'agent' ? 'Agent' : 'Plan'}</span>
+          <span className="llm-mode-badge">{sendMode === 'chat' ? 'Chat' : 'Agent'}</span>
           {!hasApiKey && <span className="llm-api-warning">API Key not set</span>}
         </div>
 
         <UnifiedMessageList
           messages={messages}
           isLoading={isProcessing}
-          onEditPlanStep={handleEditPlanStep}
-          onSkipPlanStep={handleSkipPlanStep}
         />
       </div>
 

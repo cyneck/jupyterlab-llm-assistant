@@ -1,7 +1,7 @@
 /**
  * API service for communicating with the backend.
  */
-import { LLMSettings, ChatResponse, ConnectionTestResult, ModelsResponse, MessageRole, MessageContent, MemoryEntry, ContextFile, PlanStep } from '../models/types';
+import { LLMSettings, ChatResponse, ConnectionTestResult, ModelsResponse, MessageRole, MessageContent, MemoryEntry, ContextFile } from '../models/types';
 /**
  * LLM API Service
  */
@@ -104,23 +104,6 @@ export declare class LLMApiService {
         totalChars: number;
         truncated: boolean;
     }>;
-    /**
-     * Generate a plan for a task (SSE streaming)
-     */
-    generatePlan(task: string, onEvent: (event: {
-        type: string;
-        data: any;
-    }) => void, contextText?: string, settings?: LLMSettings, signal?: AbortSignal): Promise<void>;
-    /**
-     * Execute one plan step through the agent loop (SSE streaming)
-     */
-    executePlanStep(step: PlanStep, history: Array<{
-        role: string;
-        content: string;
-    }>, onEvent: (event: {
-        type: string;
-        data: any;
-    }) => void, rootDir?: string, contextText?: string, settings?: LLMSettings, signal?: AbortSignal): Promise<void>;
     /** Get workspace info for the current project */
     getWorkspaceInfo(rootDir?: string): Promise<{
         rootDir: string;

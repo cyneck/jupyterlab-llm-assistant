@@ -34,7 +34,7 @@ export type MessageContent = string | (TextContent | ImageContent)[];
 // Unified message types (new design: modes are handlers, not panels)
 // ============================================================
 
-export type MessageMode = 'chat' | 'agent' | 'plan';
+export type MessageMode = 'chat' | 'agent';
 
 /**
  * Tool call entry embedded in a message
@@ -53,7 +53,7 @@ export interface MessageToolCall {
 }
 
 /**
- * Plan step embedded in a message
+ * Plan step embedded in a message (deprecated - keeping for type compatibility)
  */
 export interface MessagePlanStep {
   id: number;
@@ -76,7 +76,7 @@ export interface UnifiedMessage {
   // Agent-specific fields
   toolCalls?: MessageToolCall[];
   iteration?: { current: number; max: number };
-  // Plan-specific fields
+  // Deprecated plan-specific fields
   planSteps?: MessagePlanStep[];
   // Images for user messages
   images?: ImageData[];

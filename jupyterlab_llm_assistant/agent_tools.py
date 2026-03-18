@@ -353,6 +353,10 @@ class AgentToolExecutor:
 
         work_dir = cwd or self.root_dir
 
+        # Ensure work_dir exists, fallback to current working directory
+        if not os.path.isdir(work_dir):
+            work_dir = os.getcwd()
+
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
@@ -387,7 +391,7 @@ class AgentToolExecutor:
                 combined = combined[:max_output] + f"\n... (truncated, {len(combined)} total chars)"
 
             exit_code = proc.returncode
-            header = f"$ {command}\n[exit code: {exit_code}]\n{'─' * 40}\n"
+            header = f"$ {command}\n[in: {work_dir}] [exit: {exit_code}]\n{'─' * 40}\n"
 
             if exit_code == 0:
                 return True, header + (combined or "(no output)")

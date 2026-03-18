@@ -25,7 +25,7 @@ export interface ImageContent {
  * Message content can be a string or an array of content parts
  */
 export type MessageContent = string | (TextContent | ImageContent)[];
-export type MessageMode = 'chat' | 'agent' | 'plan';
+export type MessageMode = 'chat' | 'agent';
 /**
  * Tool call entry embedded in a message
  */
@@ -42,7 +42,7 @@ export interface MessageToolCall {
     endTime?: number;
 }
 /**
- * Plan step embedded in a message
+ * Plan step embedded in a message (deprecated - keeping for type compatibility)
  */
 export interface MessagePlanStep {
     id: number;

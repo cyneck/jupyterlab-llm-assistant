@@ -12,7 +12,6 @@ import {
   MessageContent,
   MemoryEntry,
   ContextFile,
-  PlanStep,
 } from '../models/types';
 
 /**
@@ -397,74 +396,6 @@ export class LLMApiService {
     });
     if (!r.ok) throw new Error(`Failed to read context files: ${r.statusText}`);
     return r.json();
-  }
-
-  // ── Plan API ──────────────────────────────────────────────────────────────
-
-  /**
-   * Generate a plan for a task (SSE streaming)
-   */
-  async generatePlan(
-    task: string,
-    onEvent: (event: { type: string; data: any }) => void,
-    contextText?: string,
-    settings?: LLMSettings,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const body: any = { task, contextText };
-    if (settings) {
-      if (settings.model) body.model = settings.model;
-      if (settings.temperature !== undefined) body.temperature = settings.temperature;
-      if (settings.maxTokens) body.maxTokens = settings.maxTokens;
-      if (settings.apiEndpoint) body.apiEndpoint = settings.apiEndpoint;
-    }
-    const response = await fetch(`${this.baseUrl}/plan/generate`, {
-      method: 'POST',
-      headers: getHeaders(),
-      signal,
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(err.error || `Plan generation failed: ${response.statusText}`);
-    }
-    await this._readSSEStream(response, onEvent);
-  }
-
-  /**
-   * Execute one plan step through the agent loop (SSE streaming)
-   */
-  async executePlanStep(
-    step: PlanStep,
-    history: Array<{ role: string; content: string }>,
-    onEvent: (event: { type: string; data: any }) => void,
-    rootDir?: string,
-    contextText?: string,
-    settings?: LLMSettings,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/plan/execute`, {
-      method: 'POST',
-      headers: getHeaders(),
-      signal,
-      body: JSON.stringify({
-        step,
-        history,
-        rootDir,
-        contextText,
-        maxIterations: 15,
-        ...settings && {
-          model: settings.model,
-          temperature: settings.temperature,
-          maxTokens: settings.maxTokens,
-        },
-      }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(err.error || `Plan execution failed: ${response.statusText}`);
-    }
-    await this._readSSEStream(response, onEvent);
   }
 
   // ── Workspace (.llm-assistant directory) API ─────────────────────────────
