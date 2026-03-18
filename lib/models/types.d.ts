@@ -42,15 +42,6 @@ export interface MessageToolCall {
     endTime?: number;
 }
 /**
- * Plan step embedded in a message (deprecated - keeping for type compatibility)
- */
-export interface MessagePlanStep {
-    id: number;
-    title: string;
-    description: string;
-    status: 'pending' | 'running' | 'completed' | 'error' | 'skipped';
-}
-/**
  * Unified message type - all modes share the same message list
  */
 export interface UnifiedMessage {
@@ -66,7 +57,6 @@ export interface UnifiedMessage {
         current: number;
         max: number;
     };
-    planSteps?: MessagePlanStep[];
     images?: ImageData[];
 }
 export interface ChatMessage {
@@ -305,15 +295,5 @@ export interface ContextFile {
 export interface ContextState {
     selectedPaths: string[];
     rootDir: string;
-}
-export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'error' | 'skipped';
-/**
- * A single step in an AI-generated plan
- */
-export interface PlanStep {
-    id: number;
-    title: string;
-    description: string;
-    status: PlanStepStatus;
 }
 //# sourceMappingURL=types.d.ts.map
