@@ -6,21 +6,26 @@ Inspired by Claude Code's .claude/ directory, this module provides:
 1. ASSISTANT.md  — project-level instruction file injected into every
                     conversation (like Claude Code's CLAUDE.md).
 2. sessions/     — conversation history as JSON files, one per session.
-3. config.json   — per-project overrides for model, temperature, system prompt.
-4. skills/       — installed skill manifests (YAML/JSON) for the skill system.
-5. cache/        — lightweight cache for resolved file trees, etc.
+3. skills/       — installed skill manifests (YAML/JSON) for the skill system.
+4. cache/        — lightweight cache for resolved file trees, etc.
+
+Note: Configuration (config.json) is now stored at USER level (~/.llm-assistant/)
+to avoid accidentally committing sensitive values (API keys) to git repositories.
+See WorkspaceConfigHandler for user-level config management.
 
 Directory layout:
     <project_root>/
     └── .llm-assistant/
         ├── ASSISTANT.md       # Project instructions for the LLM
-        ├── config.json        # Per-project LLM config overrides
-        ├── sessions/
+        ├── sessions/          # Saved conversation history
         │   ├── <session_id>.json
         │   └── ...
-        └── skills/
-            ├── <skill_name>.yaml  (installed skill manifests)
+        └── skills/            # Installed skill manifests
+            ├── <skill_name>.yaml
             └── ...
+
+User-level config location:
+    ~/.llm-assistant/config.json  # Per-user LLM config (model, temperature, etc.)
 
 Endpoints:
     GET  /llm-assistant/workspace/info
@@ -100,9 +105,12 @@ from jupyter_server.base.handlers import APIHandler
 
 WORKSPACE_DIR_NAME = ".llm-assistant"
 ASSISTANT_MD_NAME = "ASSISTANT.md"
-CONFIG_FILE_NAME = "config.json"
 SESSIONS_DIR_NAME = "sessions"
 SKILLS_DIR_NAME = "skills"
+
+# User-level config location (not project-level, to avoid committing secrets)
+USER_CONFIG_DIR = Path.home() / ".llm-assistant"
+USER_CONFIG_FILE = USER_CONFIG_DIR / "config.json"
 
 MAX_SESSION_SIZE = 2 * 1024 * 1024   # 2 MB per session file
 MAX_SESSIONS = 200
@@ -234,26 +242,26 @@ class AssistantMdHandler(APIHandler):
 
 class WorkspaceConfigHandler(APIHandler):
     """
-    GET  /llm-assistant/workspace/config  → per-project overrides
+    GET  /llm-assistant/workspace/config  → user-level config from ~/.llm-assistant/config.json
     PUT  /llm-assistant/workspace/config  ← partial update
+
+    Note: Config is stored at user level (~/.llm-assistant/config.json) instead of
+    project level to avoid accidentally committing sensitive values (API keys) to git.
     """
 
     ALLOWED_KEYS = {"model", "temperature", "maxTokens", "systemPrompt", "apiEndpoint"}
 
     @web.authenticated
     async def get(self):
-        root_dir = self.get_argument("rootDir", "")
-        ws = _workspace_dir(root_dir)
-        cfg_path = ws / CONFIG_FILE_NAME
-
+        # Always read from user-level config
         cfg: Dict[str, Any] = {}
-        if cfg_path.exists():
+        if USER_CONFIG_FILE.exists():
             try:
-                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                cfg = json.loads(USER_CONFIG_FILE.read_text(encoding="utf-8"))
             except Exception:
                 cfg = {}
 
-        self.finish(json.dumps({"config": cfg, "path": str(cfg_path)}))
+        self.finish(json.dumps({"config": cfg, "path": str(USER_CONFIG_FILE)}))
 
     @web.authenticated
     async def put(self):
@@ -262,15 +270,14 @@ class WorkspaceConfigHandler(APIHandler):
         except json.JSONDecodeError:
             raise web.HTTPError(400, "Invalid JSON")
 
-        root_dir = body.get("rootDir", "")
-        ws = _workspace_dir(root_dir)
-        cfg_path = ws / CONFIG_FILE_NAME
+        # Ensure user config directory exists
+        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Load existing
+        # Load existing user-level config
         existing: Dict[str, Any] = {}
-        if cfg_path.exists():
+        if USER_CONFIG_FILE.exists():
             try:
-                existing = json.loads(cfg_path.read_text(encoding="utf-8"))
+                existing = json.loads(USER_CONFIG_FILE.read_text(encoding="utf-8"))
             except Exception:
                 pass
 
@@ -279,8 +286,7 @@ class WorkspaceConfigHandler(APIHandler):
             if key in body:
                 existing[key] = body[key]
 
-        _ensure_dirs(ws)
-        cfg_path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+        USER_CONFIG_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
 
         self.finish(json.dumps({"ok": True, "config": existing}))
 
@@ -548,16 +554,17 @@ def load_assistant_md(root_dir: str = "") -> str:
     return ""
 
 
-def load_project_config(root_dir: str = "") -> Dict[str, Any]:
+def load_user_config() -> Dict[str, Any]:
     """
-    Load per-project config overrides from .llm-assistant/config.json.
+    Load user-level config overrides from ~/.llm-assistant/config.json.
     Returns empty dict if not present.
+
+    Note: This replaces the old project-level config to avoid committing
+    sensitive values (API keys) to git repositories.
     """
-    ws = _workspace_dir(root_dir)
-    cfg_path = ws / CONFIG_FILE_NAME
-    if cfg_path.exists():
+    if USER_CONFIG_FILE.exists():
         try:
-            return json.loads(cfg_path.read_text(encoding="utf-8"))
+            return json.loads(USER_CONFIG_FILE.read_text(encoding="utf-8"))
         except Exception:
             return {}
     return {}

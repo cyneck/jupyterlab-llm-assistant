@@ -15,7 +15,10 @@
       "Bash(timeout 10 jupyter lab --allow-root --no-browser)",
       "Bash(npm run:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(pkill -f \"jupyter-lab\")",
+      "Bash(curl -s http://127.0.0.1:8888/llm-assistant/config)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

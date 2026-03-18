@@ -439,13 +439,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
           }
         },
         contextText,
+        currentSettings,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'An error occurred';
       setError(msg);
       setIsProcessing(false);
     }
-  }, [addMessage]);
+  }, [addMessage, currentSettings]);
 
   // ── Unified send handler ───────────────────────────────────────────────────
   const handleSend = useCallback(async (

@@ -26,7 +26,6 @@ from .workspace_handler import (
     SkillListHandler,
     SkillInstallHandler,
     SkillDeleteHandler,
-    load_project_config,
 )
 
 
@@ -36,34 +35,18 @@ class BaseConfigHandler(APIHandler):
 
     Provides a single, canonical implementation of _get_api_key() so that
     every subclass shares exactly the same logic without duplication.
-
-    Configuration priority (highest to lowest):
-    1. config_store (memory, runtime changes)
-    2. workspace config (.llm-assistant/config.json)
-    3. environment variables (OPENAI_API_KEY)
     """
 
     def initialize(self, config_store: Dict[str, Any]):
         self.config_store = config_store
 
-    def _get_merged_config(self) -> Dict[str, Any]:
-        """Get merged config: config_store + workspace config as fallback."""
-        # Start with config_store (server-side runtime config)
-        merged = dict(self.config_store)
-
-        # Override with workspace config if present
-        try:
-            workspace_config = load_project_config()
-            merged.update(workspace_config)
-        except Exception:
-            pass  # Use config_store alone if workspace config fails
-
-        return merged
+    def _get_config(self) -> Dict[str, Any]:
+        """Get current config from memory store."""
+        return dict(self.config_store)
 
     def _get_api_key(self) -> Optional[str]:
-        """Return the API key from config store, workspace config, or environment."""
-        config = self._get_merged_config()
-        return config.get("apiKey") or os.environ.get("OPENAI_API_KEY")
+        """Return the API key from config store or environment."""
+        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
 
 
 class ConfigHandler(BaseConfigHandler):
@@ -76,7 +59,7 @@ class ConfigHandler(BaseConfigHandler):
 
     def _build_safe_config(self) -> dict:
         """Build safe config dict excluding sensitive data."""
-        config = self._get_merged_config()
+        config = self._get_config()
         return {
             "apiEndpoint": config.get("apiEndpoint", "https://api.openai.com/v1"),
             "apiKey": "",  # Never return actual API key
@@ -134,7 +117,7 @@ class ChatHandler(BaseConfigHandler):
 
     def _create_client(self) -> LLMClient:
         """Create LLM client with current config."""
-        config = self._get_merged_config()
+        config = self._get_config()
         return LLMClient(LLMConfig(
             api_endpoint=config.get("apiEndpoint", "https://api.openai.com/v1"),
             api_key=self._get_api_key(),
@@ -249,7 +232,7 @@ class TestConnectionHandler(BaseConfigHandler):
     @web.authenticated
     async def get(self):
         """Test the API connection."""
-        config = self._get_merged_config()
+        config = self._get_config()
         client = LLMClient(LLMConfig(
             api_endpoint=config.get("apiEndpoint", "https://api.openai.com/v1"),
             api_key=self._get_api_key(),

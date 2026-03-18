@@ -408,13 +408,21 @@ export class LLMApiService {
     task: string,
     onEvent: (event: { type: string; data: any }) => void,
     contextText?: string,
+    settings?: LLMSettings,
     signal?: AbortSignal,
   ): Promise<void> {
+    const body: any = { task, contextText };
+    if (settings) {
+      if (settings.model) body.model = settings.model;
+      if (settings.temperature !== undefined) body.temperature = settings.temperature;
+      if (settings.maxTokens) body.maxTokens = settings.maxTokens;
+      if (settings.apiEndpoint) body.apiEndpoint = settings.apiEndpoint;
+    }
     const response = await fetch(`${this.baseUrl}/plan/generate`, {
       method: 'POST',
       headers: getHeaders(),
       signal,
-      body: JSON.stringify({ task, contextText }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: response.statusText }));

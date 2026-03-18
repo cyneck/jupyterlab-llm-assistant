@@ -2,7 +2,7 @@
 Server extension for JupyterLab LLM Assistant.
 
 This module provides the entry point for the Jupyter Server extension.
-Configuration is persisted to ~/.jupyter/llm_assistant_config.json so that
+Configuration is persisted to ~/.llm-assistant/config.json so that
 settings (API endpoint, model, etc.) survive JupyterLab restarts.
 """
 
@@ -15,7 +15,7 @@ from ._version import __version__
 
 # ─── Persistence helpers ──────────────────────────────────────────────────────
 
-_CONFIG_FILE = os.path.expanduser("~/.jupyter/llm_assistant_config.json")
+_CONFIG_FILE = os.path.expanduser("~/.llm-assistant/config.json")
 
 _DEFAULT_CONFIG: Dict[str, Any] = {
     "apiEndpoint": "https://api.openai.com/v1",
@@ -34,6 +34,10 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
 def _load_config() -> Dict[str, Any]:
     """Load persisted config from disk, merging with defaults."""
     config = dict(_DEFAULT_CONFIG)
+
+    # Migration: move old config from ~/.jupyter/llm_assistant_config.json if present
+    _migrate_old_config()
+
     try:
         if os.path.exists(_CONFIG_FILE):
             with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -48,6 +52,22 @@ def _load_config() -> Dict[str, Any]:
     except Exception:
         pass  # Fall back to defaults silently
     return config
+
+
+def _migrate_old_config():
+    """Migrate config from old location ~/.jupyter/llm_assistant_config.json to new location."""
+    old_path = os.path.expanduser("~/.jupyter/llm_assistant_config.json")
+    if os.path.exists(old_path) and not os.path.exists(_CONFIG_FILE):
+        try:
+            os.makedirs(os.path.dirname(_CONFIG_FILE), exist_ok=True)
+            with open(old_path, "r", encoding="utf-8") as f:
+                old_config = json.load(f)
+            with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(old_config, f, indent=2, ensure_ascii=False)
+            # Remove old config file after successful migration
+            os.remove(old_path)
+        except Exception:
+            pass  # Silent fail - will use defaults
 
 
 def _save_config(config: Dict[str, Any]) -> None:

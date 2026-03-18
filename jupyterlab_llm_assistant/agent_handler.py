@@ -24,7 +24,6 @@ from openai import AsyncOpenAI
 from .agent_tools import AGENT_TOOLS, AgentToolExecutor
 from .agent_loop import run_agent_loop
 from .memory_handler import get_memory_store
-from .workspace_handler import load_project_config
 
 
 # Agent system prompt
@@ -79,37 +78,15 @@ class AgentHandler(APIHandler):
         self.config_store = config_store
 
     def _get_api_key(self) -> Optional[str]:
-        """Get API key from config_store, workspace config, or environment."""
-        # Try config_store first (set via /config POST)
-        key = self.config_store.get("apiKey")
-        if key:
-            return key
-        # Try workspace config (.llm-assistant/config.json)
-        try:
-            ws_config = load_project_config()
-            key = ws_config.get("apiKey")
-            if key:
-                return key
-        except Exception:
-            pass
-        # Fallback to environment
-        return os.environ.get("OPENAI_API_KEY")
+        """Get API key from config_store or environment."""
+        return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
 
-    def _get_merged_config(self) -> Dict[str, Any]:
-        """Get merged config from config_store and workspace config."""
-        merged = dict(self.config_store)
-        try:
-            ws_config = load_project_config()
-            # Workspace config overrides config_store for non-sensitive values
-            for key, value in ws_config.items():
-                if key not in merged or not merged[key]:
-                    merged[key] = value
-        except Exception:
-            pass
-        return merged
+    def _get_config(self) -> Dict[str, Any]:
+        """Get current config from memory store."""
+        return dict(self.config_store)
 
     def _create_client(self) -> AsyncOpenAI:
-        config = self._get_merged_config()
+        config = self._get_config()
         return AsyncOpenAI(
             api_key=self._get_api_key(),
             base_url=config.get("apiEndpoint", DEFAULT_API_ENDPOINT),
@@ -148,7 +125,7 @@ class AgentHandler(APIHandler):
 
         # Build an effective config that merges server config with any
         # per-request overrides sent by the frontend (model, temperature, maxTokens).
-        effective_config = self._get_merged_config()
+        effective_config = self._get_config()
         for key in ("model", "temperature", "maxTokens"):
             if key in body:
                 effective_config[key] = body[key]

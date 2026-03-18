@@ -25,4 +25,4 @@ jupyterlab_llm_assistant/labextension/package.json
 .DS_Store
 .env
 *.log
-hello.py
+.llm-assistant/

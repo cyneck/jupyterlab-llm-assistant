@@ -110,7 +110,7 @@ export declare class LLMApiService {
     generatePlan(task: string, onEvent: (event: {
         type: string;
         data: any;
-    }) => void, contextText?: string, signal?: AbortSignal): Promise<void>;
+    }) => void, contextText?: string, settings?: LLMSettings, signal?: AbortSignal): Promise<void>;
     /**
      * Execute one plan step through the agent loop (SSE streaming)
      */

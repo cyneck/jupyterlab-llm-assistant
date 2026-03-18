@@ -5,7 +5,7 @@ v0.7.0 workspace_handler + context_handler 单元测试
 1. _workspace_dir 路径计算
 2. _ensure_dirs 目录创建
 3. load_assistant_md 读取逻辑
-4. load_project_config 读取逻辑
+4. load_user_config 读取逻辑（用户级配置）
 5. YAML skill manifest 加载
 6. ContextListDirHandler 逻辑（直接调用 os.listdir）
 7. ContextListDirHandler SKIP_NAMES 过滤
@@ -40,7 +40,8 @@ ws_mod = _load("workspace_handler", "jupyterlab_llm_assistant/workspace_handler.
 ctx_mod = _load("context_handler", "jupyterlab_llm_assistant/context_handler.py")
 
 load_assistant_md = ws_mod.load_assistant_md
-load_project_config = ws_mod.load_project_config
+load_user_config = ws_mod.load_user_config
+USER_CONFIG_FILE = ws_mod.USER_CONFIG_FILE
 _workspace_dir = ws_mod._workspace_dir
 _ensure_dirs = ws_mod._ensure_dirs
 
@@ -110,25 +111,42 @@ def test_load_assistant_md():
             report("无效 UTF-8 处理（异常捕获）", False, str(e))
 
 
-def test_load_project_config():
-    print("\n[4] load_project_config 读取")
-    with tempfile.TemporaryDirectory() as tmp:
-        result = load_project_config(tmp)
+def test_load_user_config():
+    print("\n[4] load_user_config 读取（用户级配置）")
+    # Backup original config if exists
+    original_config = None
+    if USER_CONFIG_FILE.exists():
+        original_config = USER_CONFIG_FILE.read_text(encoding="utf-8")
+
+    try:
+        # Ensure user config directory exists
+        USER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        # Test: file doesn't exist returns empty dict
+        if USER_CONFIG_FILE.exists():
+            USER_CONFIG_FILE.unlink()
+        result = load_user_config()
         report("文件不存在返回空 dict", result == {})
 
-        ws = _workspace_dir(tmp)
-        _ensure_dirs(ws)
+        # Test: write and read config
         cfg = {"model": "gpt-4o", "temperature": 0.5, "maxTokens": 8192}
-        (ws / "config.json").write_text(json.dumps(cfg), encoding="utf-8")
-        result2 = load_project_config(tmp)
+        USER_CONFIG_FILE.write_text(json.dumps(cfg), encoding="utf-8")
+        result2 = load_user_config()
         report("model 字段读取正确", result2.get("model") == "gpt-4o")
         report("temperature 字段读取正确", result2.get("temperature") == 0.5)
         report("maxTokens 字段读取正确", result2.get("maxTokens") == 8192)
 
-        # Invalid JSON
-        (ws / "config.json").write_text("NOT_VALID_JSON{{{", encoding="utf-8")
-        result3 = load_project_config(tmp)
+        # Test: Invalid JSON
+        USER_CONFIG_FILE.write_text("NOT_VALID_JSON{{{", encoding="utf-8")
+        result3 = load_user_config()
         report("无效 JSON 返回空 dict", result3 == {})
+
+    finally:
+        # Restore original config
+        if original_config is not None:
+            USER_CONFIG_FILE.write_text(original_config, encoding="utf-8")
+        elif USER_CONFIG_FILE.exists():
+            USER_CONFIG_FILE.unlink()
 
 
 def test_yaml_skill_manifest():
@@ -202,7 +220,7 @@ if __name__ == "__main__":
     test_workspace_dir_path()
     test_ensure_dirs()
     test_load_assistant_md()
-    test_load_project_config()
+    test_load_user_config()
     test_yaml_skill_manifest()
     test_listdir_skip_names()
     test_session_size_limit()
