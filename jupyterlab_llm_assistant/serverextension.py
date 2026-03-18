@@ -74,11 +74,8 @@ def _save_config(config: Dict[str, Any]) -> None:
     """Persist config to disk (non-blocking best-effort)."""
     try:
         os.makedirs(os.path.dirname(_CONFIG_FILE), exist_ok=True)
-        # Never persist the raw API key to disk for security.
-        # Users should rely on OPENAI_API_KEY env var for that.
-        safe = {k: v for k, v in config.items() if k != "apiKey"}
-        # But do persist a flag that an API key was set in memory so the UI
-        # can show "key configured" after restart (user must re-enter key each session).
+        # Save all config including API key
+        safe = {k: v for k, v in config.items() if not k.startswith('_')}
         with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(safe, f, indent=2, ensure_ascii=False)
     except Exception:

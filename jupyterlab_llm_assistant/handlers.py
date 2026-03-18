@@ -45,7 +45,8 @@ class BaseConfigHandler(APIHandler):
         return dict(self.config_store)
 
     def _get_api_key(self) -> Optional[str]:
-        """Return the API key from config store or environment."""
+        """Return the API key from config file (priority) or environment variable."""
+        # Priority: config file > environment variable
         return self.config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY")
 
 
@@ -95,11 +96,11 @@ class ConfigHandler(BaseConfigHandler):
             if key in data:
                 self.config_store[key] = data[key]
 
-        # Handle API key
-        if "apiKey" in data and data["apiKey"]:
+        # Handle API key - always save to config.json
+        if "apiKey" in data:
             self.config_store["apiKey"] = data["apiKey"]
 
-        # Persist configuration to disk (non-blocking, best-effort)
+        # Persist configuration to disk (including API key)
         save_cb = self.config_store.get("_save_callback")
         if callable(save_cb):
             save_cb(self.config_store)

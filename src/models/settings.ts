@@ -90,11 +90,11 @@ export class SettingsModel {
 
   /**
    * Save settings to workspace config (.llm-assistant/config.json)
-   * Also saves apiKey to server config_store if present
+   * Also saves apiKey to server config_store
    */
   async saveSettings(settings: Partial<LLMSettings>): Promise<void> {
     // Save apiKey to server config_store if provided
-    if (settings.apiKey) {
+    if (settings.apiKey !== undefined) {
       try {
         await this._apiService.setConfig({ apiKey: settings.apiKey });
       } catch (err) {
@@ -102,7 +102,7 @@ export class SettingsModel {
       }
     }
 
-    // Filter out sensitive fields and internal fields for workspace config
+    // Filter out sensitive fields for workspace config
     const wsSettings: Partial<LLMSettings> = {};
     const allowedKeys = ['model', 'temperature', 'maxTokens', 'systemPrompt', 'enableStreaming', 'enableVision', 'apiEndpoint'];
     for (const key of allowedKeys) {

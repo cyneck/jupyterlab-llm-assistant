@@ -47,21 +47,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     return provider || PROVIDER_OPTIONS.find(p => p.value === 'custom')!;
   };
 
-  const [localSettings, setLocalSettings] = useState<LLMSettings>({
+  const [localSettings, setLocalSettings] = useState<LLMSettings>(() => ({
     ...settings,
     apiKey: settings.apiKey || '',
-  });
+  }));
   const [currentProvider, setCurrentProvider] = useState(getCurrentProvider());
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
-  // Update local settings when props change
+  // Update local settings when props change (preserve apiKey)
   useEffect(() => {
-    setLocalSettings({
+    setLocalSettings((prev) => ({
       ...settings,
-      apiKey: settings.apiKey || '',
-    });
+      apiKey: prev.apiKey, // Never overwrite user input
+    }));
     setCurrentProvider(getCurrentProvider());
   }, [settings]);
 

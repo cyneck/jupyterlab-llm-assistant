@@ -39,7 +39,7 @@ export declare class SettingsModel {
     loadSettings(): Promise<LLMSettings>;
     /**
      * Save settings to workspace config (.llm-assistant/config.json)
-     * Also saves apiKey to server config_store if present
+     * Also saves apiKey to server config_store
      */
     saveSettings(settings: Partial<LLMSettings>): Promise<void>;
     /**

@@ -769,6 +769,17 @@ body[data-jp-theme-light='false'] .llm-mention-item.active {
 .llm-settings-checkbox-label {
   font-size: 13px;
   color: var(--jp-ui-font-color1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.llm-settings-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--jp-brand-color1);
+  cursor: pointer;
 }
 
 .llm-settings-actions {
