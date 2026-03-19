@@ -26,6 +26,8 @@ jupyterlab_llm_assistant/labextension/package.json
 .env
 *.log
 .llm-assistant/
-myenv
-.idea
-.vscode
+myenv/
+venv/
+.claude/
+.idea/
+.vscode/
