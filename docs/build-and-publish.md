@@ -121,15 +121,21 @@ ls -la dist/
 - `*.whl` — Wheel 二进制包
 - `*.tar.gz` — 源码包
 
-### 3. 本地验证
+### 3. 本地验证（从 wheel 安装）
 
 ```bash
 # 安装 wheel 包测试
 pip install dist/*.whl
 
+# 重要：启用服务器扩展（wheel 安装不会自动启用）
+jupyter server extension enable --py jupyterlab_llm_assistant --sys-prefix
+
 # 检查扩展是否安装成功
 jupyter labextension list
+jupyter server extension list | grep llm-assistant
 ```
+
+> **注意**：从 wheel 包安装时，必须手动启用服务器扩展，否则后端 API 会返回 404 错误。开发模式（`pip install -e .`）会自动启用扩展。
 
 ---
 
