@@ -1,0 +1,60 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "JupyterLab: Debug Server",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/venv/bin/python",
+      "module": "jupyterlab.labapp",
+      "args": [
+        "--allow-root",
+        "--ServerApp.token=''",
+        "--ServerApp.password=''",
+        "--ServerApp.disable_check_xsrf=True"
+      ],
+      "jinja": true,
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "preLaunchTask": "pip: install editable"
+    },
+    {
+      "name": "JupyterLab: Debug Server (with browser)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/venv/bin/python",
+      "module": "jupyterlab.labapp",
+      "args": [
+        "--allow-root",
+        "--ServerApp.token=''",
+        "--ServerApp.password=''",
+        "--ServerApp.disable_check_xsrf=True",
+        "--LabApp.open_browser=True"
+      ],
+      "jinja": true,
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "preLaunchTask": "pip: install editable"
+    },
+    {
+      "name": "JupyterLab: Attach to Running Server",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "justMyCode": false,
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "${workspaceFolder}"
+        }
+      ]
+    }
+  ]
+}

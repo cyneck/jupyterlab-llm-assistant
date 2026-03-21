@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pip: install editable",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "pip", "install", "-e", ".", "--quiet"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "jlpm: build",
+      "type": "shell",
+      "command": "jlpm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "jlpm: watch",
+      "type": "shell",
+      "command": "jlpm",
+      "args": ["run", "watch"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "."
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "."
+        }
+      }
+    }
+  ]
+}
