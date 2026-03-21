@@ -8,7 +8,7 @@
 pip install jupyterlab-llm-assistant
 
 # 重要：启用 Jupyter 服务器扩展（从 wheel 安装必须执行）
-jupyter server extension enable --py jupyterlab_llm_assistant --sys-prefix
+jupyter server extension enable --py jupyterlab_llm_assistant --user
 ```
 
 或从源码安装（开发模式会自动启用扩展）：
@@ -244,7 +244,7 @@ jupyter labextension list
 
 ```bash
 # 启用服务器扩展
-jupyter server extension enable --py jupyterlab_llm_assistant --sys-prefix
+jupyter server extension enable --py jupyterlab_llm_assistant --user
 
 # 验证是否启用
 jupyter server extension list | grep llm-assistant
@@ -255,7 +255,7 @@ jupyter server extension list | grep llm-assistant
 
 ```bash
 pip install jupyterlab-llm-assistant
-jupyter server extension enable --py jupyterlab_llm_assistant --sys-prefix
+jupyter server extension enable --py jupyterlab_llm_assistant --user
 ```
 
 ### @ 选择器无文件列表
