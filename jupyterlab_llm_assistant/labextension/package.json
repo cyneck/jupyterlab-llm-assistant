@@ -1,6 +1,6 @@
 {
   "name": "jupyterlab-llm-assistant",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A JupyterLab extension for LLM-powered coding assistant with chat interface",
   "keywords": [
     "jupyter",
@@ -94,7 +94,7 @@
       "@jupyterlab/ui-components"
     ],
     "_build": {
-      "load": "static/remoteEntry.b46daf1bcdac96a395fb.js",
+      "load": "static/remoteEntry.31f28f3db0238c19392d.js",
       "extension": "./extension",
       "style": "./style"
     }
