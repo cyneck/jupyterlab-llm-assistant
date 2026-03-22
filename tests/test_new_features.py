@@ -199,7 +199,7 @@ async def test_notebook_execute():
             "code": "import time; time.sleep(200)",
             "timeout": 2,
         })
-        report("超时限制生效（应返回失败或超时）", not ok5 or "timeout" in out5.lower(), out5[:200])
+        report("超时限制生效（应返回失败或超时）", not ok5 or "timed out" in out5.lower() or "timeout" in out5.lower(), out5[:200])
 
         # ── 3.6 语法错误处理
         ok6, out6 = await executor.execute_tool("notebook_execute", {

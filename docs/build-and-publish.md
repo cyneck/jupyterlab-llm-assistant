@@ -128,7 +128,7 @@ ls -la dist/
 pip install dist/*.whl
 
 # 重要：启用服务器扩展（wheel 安装不会自动启用）
-jupyter server extension enable --py jupyterlab_llm_assistant --user
+jupyter server extension enable jupyterlab_llm_assistant --user
 
 # 检查扩展是否安装成功
 jupyter labextension list
@@ -285,7 +285,7 @@ grep -i llm /path/to/jupyter.log
 
 ```bash
 # 方法1: 自动启用
-jupyter server extension enable --py jupyterlab_llm_assistant --user
+jupyter server extension enable jupyterlab_llm_assistant --user
 
 # 方法2: 手动创建配置文件
 mkdir -p $(jupyter --config-dir)/jupyter_server_config.d

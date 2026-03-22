@@ -8,7 +8,8 @@
 pip install jupyterlab-llm-assistant
 
 # 重要：启用 Jupyter 服务器扩展（从 wheel 安装必须执行）
-jupyter server extension enable --py jupyterlab_llm_assistant --user
+# 注意：不要使用 --py 标志，该标志只检查配置文件，不检查 entry points
+jupyter server extension enable jupyterlab_llm_assistant --user
 ```
 
 或从源码安装（开发模式会自动启用扩展）：
@@ -197,8 +198,9 @@ jlpm run build
 jlpm run build:prod
 
 # 运行后端单元测试
-python tests/test_new_features.py
-python tests/test_v070_workspace.py
+python tests/test_new_features.py        # Agent 工具测试 (edit_file, notebook_execute 等)
+python tests/test_v070_workspace.py     # Workspace 测试 (.llm-assistant 目录)
+python tests/test_backend_loading.py    # 后端加载测试 (entry points, 路由注册, 配置加载)
 ```
 
 ---
@@ -243,8 +245,8 @@ jupyter labextension list
 **修复**:
 
 ```bash
-# 启用服务器扩展
-jupyter server extension enable --py jupyterlab_llm_assistant --user
+# 启用服务器扩展（注意：不要使用 --py 标志，--py 只检查配置文件，不检查 entry points）
+jupyter server extension enable jupyterlab_llm_assistant --user
 
 # 验证是否启用
 jupyter server extension list | grep llm-assistant
@@ -255,7 +257,7 @@ jupyter server extension list | grep llm-assistant
 
 ```bash
 pip install jupyterlab-llm-assistant
-jupyter server extension enable --py jupyterlab_llm_assistant --user
+jupyter server extension enable jupyterlab_llm_assistant --user
 ```
 
 ### @ 选择器无文件列表
