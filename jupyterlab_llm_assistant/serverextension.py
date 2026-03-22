@@ -105,24 +105,3 @@ def load_jupyter_server_extension(server_app):
     server_app.log.info("JupyterLab LLM Assistant extension loaded successfully")
 
 
-# For Jupyter Server 2.x
-def _jupyter_server_extension_points():
-    """
-    Returns a list of dictionaries with metadata describing
-    where to find the `_load_jupyter_server_extension` function.
-    """
-    return [{
-        "module": "jupyterlab_llm_assistant",
-        "app": JupyterLabLLMAssistantExtension,
-    }]
-
-
-class JupyterLabLLMAssistantExtension:
-    """Extension class for Jupyter Server 2.x."""
-
-    def __init__(self):
-        self.config_store = _config_store
-
-    def _load_jupyter_server_extension(self, server_app):
-        """Load the server extension."""
-        load_jupyter_server_extension(server_app)

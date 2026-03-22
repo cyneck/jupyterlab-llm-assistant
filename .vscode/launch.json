@@ -11,7 +11,9 @@
         "--allow-root",
         "--ServerApp.token=''",
         "--ServerApp.password=''",
-        "--ServerApp.disable_check_xsrf=True"
+        "--ServerApp.disable_check_xsrf=True",
+        "--ServerApp.allow_origin='*'",
+        "--ServerApp.allow_credentials=False"
       ],
       "jinja": true,
       "justMyCode": false,
@@ -31,7 +33,9 @@
         "--ServerApp.token=''",
         "--ServerApp.password=''",
         "--ServerApp.disable_check_xsrf=True",
-        "--LabApp.open_browser=True"
+        "--LabApp.open_browser=True",
+        "--ServerApp.allow_origin='*'",
+        "--ServerApp.allow_credentials=False"
       ],
       "jinja": true,
       "justMyCode": false,

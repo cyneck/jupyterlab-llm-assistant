@@ -104,6 +104,17 @@ jupyter lab
 5. **调整参数** — Temperature、Max Tokens 等
 6. **测试连接** — 验证配置是否正确
 
+### 🔐 密钥安全说明
+
+- **配置存储位置**: API Key 保存在 Jupyter 用户数据目录：
+  - Linux/macOS: `~/.local/share/jupyter/lab/jupyterlab-llm-assistant.json`
+  - Windows: `%APPDATA%\jupyter\lab\jupyterlab-llm-assistant.json`
+
+- **安全提示**:
+  - 密钥仅保存在本地，不会上传到任何第三方服务器
+  - 请勿将配置文件提交到 Git 仓库
+  - 建议使用项目级配置（`.llm-assistant/config.json`）覆盖敏感设置，并将其加入 `.gitignore`
+
 ### 项目级配置（可选）
 
 在项目根目录创建 `.llm-assistant/config.json` 可覆盖全局配置：
