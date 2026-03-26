@@ -7,6 +7,7 @@ Provides REST API endpoints for chat and configuration management.
 import json
 import os
 import asyncio
+import logging
 from typing import Dict, Any, Optional, List
 from tornado import web
 from jupyter_server.base.handlers import APIHandler
@@ -26,6 +27,9 @@ from .workspace_handler import (
     SkillInstallHandler,
     SkillDeleteHandler,
 )
+
+# Module-level logger
+logger = logging.getLogger("jupyterlab_llm_assistant.handlers")
 
 
 class BaseConfigHandler(APIHandler):
@@ -75,14 +79,17 @@ class ConfigHandler(BaseConfigHandler):
     @web.authenticated
     async def get(self):
         """Get current configuration (excluding sensitive data)."""
+        logger.info("[ConfigHandler] GET /llm-assistant/config")
         self.finish(json.dumps(self._build_safe_config()))
 
     @web.authenticated
     async def post(self):
         """Update configuration."""
+        logger.info("[ConfigHandler] POST /llm-assistant/config")
         try:
             data = json.loads(self.request.body.decode("utf-8"))
         except json.JSONDecodeError:
+            logger.warning("[ConfigHandler] Invalid JSON in request body")
             raise web.HTTPError(400, "Invalid JSON")
 
         # Update config store
@@ -91,18 +98,24 @@ class ConfigHandler(BaseConfigHandler):
             "systemPrompt", "enableStreaming", "enableVision"
         ]
 
+        updated_keys = []
         for key in allowed_keys:
             if key in data:
                 self.config_store[key] = data[key]
+                updated_keys.append(key)
 
         # Handle API key - always save to config.json
         if "apiKey" in data:
             self.config_store["apiKey"] = data["apiKey"]
+            updated_keys.append("apiKey")
+
+        logger.info(f"[ConfigHandler] Updated config keys: {updated_keys}")
 
         # Persist configuration to disk (including API key)
         save_cb = self.config_store.get("_save_callback")
         if callable(save_cb):
             save_cb(self.config_store)
+            logger.info("[ConfigHandler] Config persisted to disk")
 
         # Fix: do NOT call await self.get() — build response directly
         self.finish(json.dumps(self._build_safe_config()))
@@ -141,26 +154,33 @@ class ChatHandler(BaseConfigHandler):
             "stream": true  // optional, default true
         }
         """
+        logger.info("[ChatHandler] POST /llm-assistant/chat")
         try:
             data = json.loads(self.request.body.decode("utf-8"))
         except json.JSONDecodeError:
+            logger.warning("[ChatHandler] Invalid JSON in request body")
             raise web.HTTPError(400, "Invalid JSON")
 
         messages = data.get("messages", [])
         images = data.get("images")
         stream = data.get("stream", True)
 
+        logger.info(f"[ChatHandler] stream={stream}, message_count={len(messages)}, has_images={bool(images)}")
+
         if not messages:
+            logger.warning("[ChatHandler] No messages provided")
             raise web.HTTPError(400, "Messages are required")
 
         # Check for API key
         if not self._get_api_key():
+            logger.warning("[ChatHandler] API key not configured")
             raise web.HTTPError(401, "API key not configured. Set OPENAI_API_KEY environment variable.")
 
         client = self._create_client()
 
         if stream:
             # Streaming response using SSE
+            logger.info("[ChatHandler] Starting streaming response")
             self.set_header("Content-Type", "text/event-stream")
             self.set_header("Cache-Control", "no-cache")
             self.set_header("Connection", "keep-alive")
@@ -175,17 +195,22 @@ class ChatHandler(BaseConfigHandler):
                 # Send done event
                 self.write("data: [DONE]\n\n")
                 await self.flush()
+                logger.info("[ChatHandler] Streaming completed successfully")
             except Exception as e:
+                logger.error(f"[ChatHandler] Streaming error: {e}")
                 self.write(f"data: {json.dumps({'error': str(e)})}\n\n")
                 await self.flush()
             finally:
                 self.finish()
         else:
             # Non-streaming response
+            logger.info("[ChatHandler] Starting non-streaming response")
             try:
                 response = await client.chat(messages, images)
+                logger.info(f"[ChatHandler] Non-streaming response completed, length={len(response)}")
                 self.finish(json.dumps({"content": response}))
             except Exception as e:
+                logger.error(f"[ChatHandler] Non-streaming error: {e}")
                 raise web.HTTPError(500, str(e))
 
 
@@ -197,10 +222,12 @@ class ModelsHandler(BaseConfigHandler):
     @web.authenticated
     async def get(self):
         """List available models from the API."""
+        logger.info("[ModelsHandler] GET /llm-assistant/models")
         from openai import AsyncOpenAI
 
         api_key = self._get_api_key()
         if not api_key:
+            logger.warning("[ModelsHandler] API key not configured")
             raise web.HTTPError(401, "API key not configured")
 
         try:
@@ -211,8 +238,10 @@ class ModelsHandler(BaseConfigHandler):
             )
             models = await client.models.list()
             model_list = [{"id": m.id, "owned_by": m.owned_by} for m in models.data]
+            logger.info(f"[ModelsHandler] Retrieved {len(model_list)} models from API")
             self.finish(json.dumps({"models": model_list}))
         except Exception as e:
+            logger.error(f"[ModelsHandler] Failed to fetch models: {e}")
             # Return default models if API call fails
             default_models = [
                 {"id": "gpt-4o", "owned_by": "openai"},
@@ -221,6 +250,7 @@ class ModelsHandler(BaseConfigHandler):
                 {"id": "gpt-4", "owned_by": "openai"},
                 {"id": "gpt-3.5-turbo", "owned_by": "openai"},
             ]
+            logger.info(f"[ModelsHandler] Returning {len(default_models)} default models")
             self.finish(json.dumps({"models": default_models, "error": str(e)}))
 
 
@@ -232,6 +262,7 @@ class TestConnectionHandler(BaseConfigHandler):
     @web.authenticated
     async def get(self):
         """Test the API connection."""
+        logger.info("[TestConnectionHandler] GET /llm-assistant/test")
         config = self._get_config()
         client = LLMClient(LLMConfig(
             api_endpoint=config.get("apiEndpoint", "https://api.openai.com/v1"),
@@ -239,7 +270,9 @@ class TestConnectionHandler(BaseConfigHandler):
             model=config.get("model", "gpt-4o"),
         ))
 
+        logger.info("[TestConnectionHandler] Testing API connection...")
         result = await client.test_connection()
+        logger.info(f"[TestConnectionHandler] Connection test result: {result.get('success', False)}")
         self.finish(json.dumps(result))
 
 

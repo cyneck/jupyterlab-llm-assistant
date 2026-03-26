@@ -18,7 +18,10 @@
       "Bash(git commit:*)",
       "Bash(pkill -f \"jupyter-lab\")",
       "Bash(curl -s http://127.0.0.1:8888/llm-assistant/config)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(jupyter lab:*)",
+      "Bash(git push:*)",
+      "Bash(git tag:*)"
     ],
     "deny": [],
     "ask": []
