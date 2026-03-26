@@ -1,6 +1,6 @@
 {
   "name": "jupyterlab-llm-assistant",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A JupyterLab extension for LLM-powered coding assistant with chat interface",
   "keywords": [
     "jupyter",
@@ -11,14 +11,14 @@
     "chat",
     "assistant"
   ],
-  "homepage": "https://github.com/example/jupyterlab-llm-assistant",
+  "homepage": "https://github.com/cyneck/jupyterlab-llm-assistant",
   "bugs": {
-    "url": "https://github.com/example/jupyterlab-llm-assistant/issues"
+    "url": "https://github.com/cyneck/jupyterlab-llm-assistant/issues"
   },
   "license": "BSD-3-Clause",
   "author": {
     "name": "JupyterLab LLM Assistant Team",
-    "email": "example@example.com"
+    "email": "cyneck@qq.com"
   },
   "files": [
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -30,7 +30,7 @@
   "style": "style/index.css",
   "repository": {
     "type": "git",
-    "url": "https://github.com/example/jupyterlab-llm-assistant.git"
+    "url": "https://github.com/cyneck/jupyterlab-llm-assistant.git"
   },
   "scripts": {
     "build": "jlpm run build:lib && jlpm run build:labextension:dev && jlpm run deploy",
@@ -88,7 +88,6 @@
   "jupyterlab": {
     "extension": true,
     "outputDir": "jupyterlab_llm_assistant/labextension",
-    "schemaDir": "schema",
     "sharedPackages": [
       "@jupyterlab/apputils",
       "@jupyterlab/settingregistry",

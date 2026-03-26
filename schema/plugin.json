@@ -1,0 +1,7 @@
+{
+  "title": "LLM Assistant",
+  "description": "Settings for LLM Assistant extension",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": true
+}

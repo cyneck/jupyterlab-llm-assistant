@@ -6,9 +6,13 @@
 
 ```bash
 pip install jupyterlab-llm-assistant
+
+# 重要：启用 Jupyter 服务器扩展（从 wheel 安装必须执行）
+# 注意：不要使用 --py 标志，该标志只检查配置文件，不检查 entry points
+jupyter server extension enable jupyterlab_llm_assistant --user
 ```
 
-或从源码安装：
+或从源码安装（开发模式会自动启用扩展）：
 
 ```bash
 git clone https://github.com/cyneck/jupyterlab-llm-assistant.git
@@ -17,6 +21,8 @@ pip install -e .
 jlpm install
 jlpm run build
 ```
+
+> **故障排除**：如果从 PyPI/wheel 安装后配置 LLM 时报 404 错误，说明服务器扩展未启用，请运行上述 `jupyter server extension enable` 命令。
 
 ### 2. 启动 JupyterLab
 
@@ -192,8 +198,9 @@ jlpm run build
 jlpm run build:prod
 
 # 运行后端单元测试
-python tests/test_new_features.py
-python tests/test_v070_workspace.py
+python tests/test_new_features.py        # Agent 工具测试 (edit_file, notebook_execute 等)
+python tests/test_v070_workspace.py     # Workspace 测试 (.llm-assistant 目录)
+python tests/test_backend_loading.py    # 后端加载测试 (entry points, 路由注册, 配置加载)
 ```
 
 ---
@@ -229,14 +236,28 @@ jlpm run build
 jupyter labextension list
 ```
 
-### Agent 面板不出现
+### Agent 面板不出现 / API 404 错误
 
-确认 server extension 已启用：
+**症状**: 配置 LLM 时显示 "Failed to set config: Not Found"，或 Agent 模式无法使用。
+
+**原因**: 服务器扩展（Server Extension）未启用。从 wheel 包安装时不会自动启用。
+
+**修复**:
 
 ```bash
-jupyter server extension list | grep llm
-# 如果未启用：
-jupyter server extension enable --py jupyterlab_llm_assistant
+# 启用服务器扩展（注意：不要使用 --py 标志，--py 只检查配置文件，不检查 entry points）
+jupyter server extension enable jupyterlab_llm_assistant --user
+
+# 验证是否启用
+jupyter server extension list | grep llm-assistant
+# 应显示: jupyterlab_llm_assistant enabled OK
+```
+
+如果显示 `X The module 'jupyterlab_llm_assistant' could not be found`，说明包未安装，请重新安装：
+
+```bash
+pip install jupyterlab-llm-assistant
+jupyter server extension enable jupyterlab_llm_assistant --user
 ```
 
 ### @ 选择器无文件列表
