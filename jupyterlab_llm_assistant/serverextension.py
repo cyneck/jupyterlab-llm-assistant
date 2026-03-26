@@ -31,7 +31,7 @@ def _configure_logging():
     handler = logging.StreamHandler()
     handler.setLevel(level)
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     handler.setFormatter(formatter)

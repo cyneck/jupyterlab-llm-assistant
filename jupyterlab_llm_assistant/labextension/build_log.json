@@ -10,8 +10,8 @@
         {
           "test": "/(?<!\\.raw)\\.css$/",
           "use": [
-            "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/node_modules/style-loader/dist/cjs.js",
-            "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/node_modules/css-loader/dist/cjs.js"
+            "/mnt/e/Code/jupyterlab-llm-assistant/node_modules/style-loader/dist/cjs.js",
+            "/mnt/e/Code/jupyterlab-llm-assistant/node_modules/css-loader/dist/cjs.js"
           ]
         },
         {
@@ -81,7 +81,7 @@
           "test": "/\\.js$/",
           "enforce": "pre",
           "use": [
-            "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/node_modules/@jupyterlab/builder/node_modules/source-map-loader/dist/cjs.js"
+            "/mnt/e/Code/jupyterlab-llm-assistant/node_modules/@jupyterlab/builder/node_modules/source-map-loader/dist/cjs.js"
           ]
         }
       ]
@@ -91,8 +91,8 @@
         "url": false,
         "buffer": false,
         "crypto": false,
-        "path": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/node_modules/path-browserify/index.js",
-        "process": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/node_modules/process/browser.js"
+        "path": "/mnt/e/Code/jupyterlab-llm-assistant/node_modules/path-browserify/index.js",
+        "process": "/mnt/e/Code/jupyterlab-llm-assistant/node_modules/process/browser.js"
       }
     },
     "watchOptions": {
@@ -102,7 +102,7 @@
     "output": {
       "hashFunction": "sha256",
       "filename": "[name].[contenthash].js",
-      "path": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/jupyterlab_llm_assistant/labextension/static",
+      "path": "/mnt/e/Code/jupyterlab-llm-assistant/jupyterlab_llm_assistant/labextension/static",
       "publicPath": "auto"
     },
     "plugins": [
@@ -123,9 +123,9 @@
           },
           "filename": "remoteEntry.[contenthash].js",
           "exposes": {
-            "./index": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/lib/index.js",
-            "./extension": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/lib/index.js",
-            "./style": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/style/index.css"
+            "./index": "/mnt/e/Code/jupyterlab-llm-assistant/lib/index.js",
+            "./extension": "/mnt/e/Code/jupyterlab-llm-assistant/lib/index.js",
+            "./style": "/mnt/e/Code/jupyterlab-llm-assistant/style/index.css"
           },
           "shared": {
             "0": "@jupyterlab/apputils",
@@ -718,9 +718,9 @@
             "react-markdown": {},
             "remark-gfm": {},
             "jupyterlab-llm-assistant": {
-              "version": "0.1.1",
+              "version": "0.1.2",
               "singleton": true,
-              "import": "/Volumes/extdata/Users/eric/code/jupyterlab-llm-assistant/lib/index.js"
+              "import": "/mnt/e/Code/jupyterlab-llm-assistant/lib/index.js"
             }
           }
         }

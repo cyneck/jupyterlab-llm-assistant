@@ -21,7 +21,11 @@
       "Bash(curl:*)",
       "Bash(jupyter lab:*)",
       "Bash(git push:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(python3 -m build)",
+      "Bash(docker build:*)",
+      "Bash(podman build:*)",
+      "Bash(podman images:*)"
     ],
     "deny": [],
     "ask": []

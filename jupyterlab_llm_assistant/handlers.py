@@ -92,6 +92,10 @@ class ConfigHandler(BaseConfigHandler):
             logger.warning("[ConfigHandler] Invalid JSON in request body")
             raise web.HTTPError(400, "Invalid JSON")
 
+        # Debug: log request body (mask apiKey)
+        debug_data = {k: (v if k != "apiKey" else "***") for k, v in data.items()}
+        logger.debug(f"[ConfigHandler] request_body: {json.dumps(debug_data, ensure_ascii=False)[:500]}")
+
         # Update config store
         allowed_keys = [
             "apiEndpoint", "model", "temperature", "maxTokens",
@@ -166,6 +170,7 @@ class ChatHandler(BaseConfigHandler):
         stream = data.get("stream", True)
 
         logger.info(f"[ChatHandler] stream={stream}, message_count={len(messages)}, has_images={bool(images)}")
+        logger.debug(f"[ChatHandler] request_body: {json.dumps(data, ensure_ascii=False)[:1000]}")
 
         if not messages:
             logger.warning("[ChatHandler] No messages provided")
