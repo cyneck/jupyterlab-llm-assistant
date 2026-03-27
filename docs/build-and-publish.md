@@ -195,6 +195,7 @@ v0.7.0 新增以下文件，构建时会自动包含在 wheel 包中：
 | `GET` | `/llm-assistant/workspace/info` | 工作区信息（是否有 ASSISTANT.md 等） |
 | `GET/PUT` | `/llm-assistant/workspace/assistant-md` | 读写 ASSISTANT.md |
 | `GET/PUT` | `/llm-assistant/workspace/config` | 读写项目级 LLM 配置 |
+| `POST` | `/llm-assistant/config/reload` | 重新加载配置文件 |
 | `GET/POST` | `/llm-assistant/workspace/sessions` | 会话列表 / 保存会话 |
 | `GET/DELETE` | `/llm-assistant/workspace/sessions/<id>` | 读取/删除单个会话 |
 | `GET` | `/llm-assistant/workspace/skills` | 已安装 skill 列表 |
