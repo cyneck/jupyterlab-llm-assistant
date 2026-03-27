@@ -76,21 +76,6 @@ class ConfigHandler(BaseConfigHandler):
     POST: Update configuration
     """
 
-    def _build_safe_config(self) -> dict:
-        """Build safe config dict excluding sensitive data."""
-        config = self._get_config()
-        return {
-            "apiEndpoint": config.get("apiEndpoint", "https://api.openai.com/v1"),
-            "apiKey": "",  # Never return actual API key
-            "model": config.get("model", "gpt-4o"),
-            "temperature": config.get("temperature", 0.7),
-            "maxTokens": config.get("maxTokens", 4096),
-            "systemPrompt": config.get("systemPrompt", ""),
-            "enableStreaming": config.get("enableStreaming", True),
-            "enableVision": config.get("enableVision", True),
-            "hasApiKey": bool(self._get_api_key()),
-        }
-
     @web.authenticated
     async def get(self):
         """Get current configuration (excluding sensitive data)."""
