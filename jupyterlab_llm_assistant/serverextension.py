@@ -97,6 +97,17 @@ def _load_config() -> Dict[str, Any]:
     return config
 
 
+def _reload_config() -> Dict[str, Any]:
+    """Reload config from disk, updating global _config_store."""
+    global _config_store
+    logger.info("[_reload_config] Reloading config from disk")
+    _config_store = _load_config()
+    _config_store["_save_callback"] = _save_config
+    api_key_set = bool(_config_store.get("apiKey") or os.environ.get("OPENAI_API_KEY"))
+    logger.info(f"[_reload_config] Reloaded config: apiKey set={api_key_set}, model={_config_store.get('model')}")
+    return _config_store
+
+
 def _migrate_old_config():
     """Migrate config from old location ~/.jupyter/llm_assistant_config.json to new location."""
     old_path = os.path.expanduser("~/.jupyter/llm_assistant_config.json")

@@ -25,7 +25,21 @@
       "Bash(python3 -m build)",
       "Bash(docker build:*)",
       "Bash(podman build:*)",
-      "Bash(podman images:*)"
+      "Bash(podman images:*)",
+      "Bash(ls -la /mnt/d/code/jupyterlab-llm-assistant/*.whl)",
+      "Bash(docker run:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker exec:*)",
+      "Bash(unzip -l /mnt/d/code/jupyterlab-llm-assistant/dist/jupyterlab_llm_assistant-0.1.2-py3-none-any.whl)",
+      "Bash(npm install:*)",
+      "Bash(jlpm install:*)",
+      "Bash(docker stop:*)",
+      "Bash(TOKEN=\"aa123db22ffae80d403d0ecb10c404c018ee5377bad591e9\")",
+      "Bash(__NEW_LINE_60dc565cc2438b94__ echo:*)",
+      "Bash(__NEW_LINE_ce8894595b7929f1__ echo:*)",
+      "Bash(__NEW_LINE_d3ca1545d8def3e9__ echo:*)",
+      "Bash(__NEW_LINE_654b2fd63903556b__ echo:*)",
+      "Bash(__NEW_LINE_e6d7b796c033910a__ echo:*)"
     ],
     "deny": [],
     "ask": []

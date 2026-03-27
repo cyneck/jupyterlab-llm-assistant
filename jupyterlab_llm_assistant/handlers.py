@@ -125,6 +125,27 @@ class ConfigHandler(BaseConfigHandler):
         self.finish(json.dumps(self._build_safe_config()))
 
 
+class ConfigReloadHandler(BaseConfigHandler):
+    """
+    Handler for reloading configuration from disk.
+
+    POST: Reload configuration from config.json
+    """
+
+    @web.authenticated
+    async def post(self):
+        """Reload configuration from disk."""
+        logger.info("[ConfigReloadHandler] POST /llm-assistant/config/reload")
+        try:
+            from .serverextension import _reload_config
+            _reload_config()
+            logger.info("[ConfigReloadHandler] Config reload successful")
+            self.finish(json.dumps(self._build_safe_config()))
+        except Exception as e:
+            logger.error(f"[ConfigReloadHandler] Config reload failed: {e}")
+            raise web.HTTPError(500, f"Failed to reload config: {e}")
+
+
 class ChatHandler(BaseConfigHandler):
     """
     Handler for chat completion requests.
@@ -296,6 +317,7 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
     routes = [
         (url_path_join(base_url, "/llm-assistant/chat"), ChatHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/config"), ConfigHandler, {"config_store": config_store}),
+        (url_path_join(base_url, "/llm-assistant/config/reload"), ConfigReloadHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/models"), ModelsHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/test"), TestConnectionHandler, {"config_store": config_store}),
     ]

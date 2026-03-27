@@ -200,6 +200,8 @@ v0.7.0 新增以下文件，构建时会自动包含在 wheel 包中：
 | `GET` | `/llm-assistant/workspace/skills` | 已安装 skill 列表 |
 | `POST` | `/llm-assistant/workspace/skills/install` | 安装 skill manifest |
 | `DELETE` | `/llm-assistant/workspace/skills/<name>` | 删除 skill |
+| `POST` | `/llm-assistant/context/read` | 读取文件内容（支持多文件） |
+| `POST` | `/llm-assistant/context/resolve` | 解析 glob 模式或路径 |
 | `POST` | `/llm-assistant/context/listdir` | 目录单级列表（@ 选择器用） |
 
 ---

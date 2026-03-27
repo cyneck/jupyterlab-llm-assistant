@@ -40,9 +40,12 @@ class LLMConfig:
 
     @classmethod
     def from_settings(cls, settings: Dict[str, Any]) -> "LLMConfig":
-        """Create config from settings dictionary."""
-        # API key from environment variable
-        api_key = os.environ.get("OPENAI_API_KEY")
+        """Create config from settings dictionary.
+
+        Priority: settings["apiKey"] > environment variable > None
+        """
+        # API key: config file takes priority over environment variable
+        api_key = settings.get("apiKey") or os.environ.get("OPENAI_API_KEY")
 
         return cls(
             api_endpoint=settings.get("apiEndpoint", cls.api_endpoint),
@@ -215,12 +218,12 @@ class LLMClient:
         Test the API connection.
 
         Returns:
-            Dictionary with connection status
+            Dictionary with connection status and details
         """
         if not self.config.api_key:
             return {
                 "success": False,
-                "error": "API key not configured. Set OPENAI_API_KEY environment variable."
+                "error": "API key not configured. Set apiKey in config or OPENAI_API_KEY environment variable."
             }
 
         try:
@@ -235,7 +238,20 @@ class LLMClient:
                 "response": response.choices[0].message.content
             }
         except Exception as e:
+            error_str = str(e)
+            # Provide more helpful error messages for common issues
+            if "timeout" in error_str.lower() or "timed out" in error_str.lower():
+                error_detail = f"Connection timeout. API endpoint: {self.config.api_endpoint}. Check network/firewall."
+            elif "authentication" in error_str.lower() or "auth" in error_str.lower() or "api key" in error_str.lower():
+                error_detail = f"Authentication failed. API endpoint: {self.config.api_endpoint}. Verify API key is valid."
+            elif "connection" in error_str.lower():
+                error_detail = f"Connection failed. API endpoint: {self.config.api_endpoint}. Check network connectivity."
+            else:
+                error_detail = error_str
             return {
                 "success": False,
-                "error": str(e)
+                "error": error_detail,
+                "error_type": type(e).__name__,
+                "api_endpoint": self.config.api_endpoint,
+                "model": self.config.model,
             }
