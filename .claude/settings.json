@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(podman run:*)",
+      "Bash(podman ps:*)",
+      "Bash(podman stop:*)",
+      "Bash(podman rm:*)",
+      "Bash(podman logs:*)",
+      "Bash(1)",
+      "Read(//root/.llm-assistant/**)",
+      "Bash(twine check:*)",
+      "Bash(twine upload:*)",
+      "Bash(git check-ignore:*)"
+    ]
+  }
+}
