@@ -251,6 +251,9 @@ class WorkspaceConfigHandler(APIHandler):
 
     ALLOWED_KEYS = {"model", "temperature", "maxTokens", "systemPrompt", "apiEndpoint"}
 
+    def initialize(self, config_store: Dict[str, Any]):
+        self.config_store = config_store
+
     @web.authenticated
     async def get(self):
         # Always read from user-level config
@@ -287,6 +290,11 @@ class WorkspaceConfigHandler(APIHandler):
                 existing[key] = body[key]
 
         USER_CONFIG_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+        # Sync to in-memory config_store and persist (keeps config.json and config_store in sync)
+        for key in self.ALLOWED_KEYS:
+            if key in existing:
+                self.config_store[key] = existing[key]
 
         self.finish(json.dumps({"ok": True, "config": existing}))
 

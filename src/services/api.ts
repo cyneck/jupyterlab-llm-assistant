@@ -12,6 +12,7 @@ import {
   MessageContent,
   MemoryEntry,
   ContextFile,
+  ProviderInfo,
 } from '../models/types';
 
 /**
@@ -66,13 +67,17 @@ export class LLMApiService {
   }
 
   /**
-   * Set configuration
+   * Set configuration - sends complete config by merging with current
    */
   async setConfig(settings: Partial<LLMSettings>): Promise<void> {
+    // Get current config first to merge
+    const current = await this.getConfig();
+    // Merge partial settings with current config
+    const merged = { ...current, ...settings };
     const response = await fetch(`${this.baseUrl}/config`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify(settings),
+      body: JSON.stringify(merged),
     });
 
     if (!response.ok) {
@@ -224,6 +229,22 @@ export class LLMApiService {
 
     if (!response.ok) {
       throw new Error(`Failed to get models: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get available providers
+   */
+  async getProviders(): Promise<{ providers: ProviderInfo[] }> {
+    const response = await fetch(`${this.baseUrl}/providers`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get providers: ${response.statusText}`);
     }
 
     return response.json();

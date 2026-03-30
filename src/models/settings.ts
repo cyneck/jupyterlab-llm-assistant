@@ -71,9 +71,12 @@ export class SettingsModel {
       const wsSettings = wsConfig.config || {};
       // Merge with defaults and server config
       const serverConfig = await this._apiService.getConfig();
+      // Only use systemPrompt if it's non-empty, otherwise keep DEFAULT_SETTINGS
+      const effectiveSystemPrompt = serverConfig.systemPrompt || DEFAULT_SETTINGS.systemPrompt;
       this._settings = {
         ...DEFAULT_SETTINGS,
         ...serverConfig,
+        systemPrompt: effectiveSystemPrompt,
         ...wsSettings,
         // Preserve hasApiKey from server config
         hasApiKey: serverConfig.hasApiKey,

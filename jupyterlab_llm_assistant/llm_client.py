@@ -11,6 +11,8 @@ from typing import AsyncGenerator, List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
 
+from .serverextension import DEFAULT_SYSTEM_PROMPT
+
 
 @dataclass
 class Message:
@@ -34,7 +36,7 @@ class LLMConfig:
     model: str = "gpt-4o"
     temperature: float = 0.7
     max_tokens: int = 4096
-    system_prompt: str = "You are a helpful AI coding assistant."
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT
     enable_streaming: bool = True
     enable_vision: bool = True
 
@@ -95,7 +97,7 @@ class LLMClient:
         result = []
 
         if include_system:
-            system_content = self.config.system_prompt or "You are a helpful AI coding assistant."
+            system_content = self.config.system_prompt or DEFAULT_SYSTEM_PROMPT
             # Append active memories to the system prompt
             memory_text = get_memory_store().export_as_text()
             if memory_text:

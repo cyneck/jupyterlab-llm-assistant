@@ -14,6 +14,7 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import url_path_join
 
 from .llm_client import LLMClient, LLMConfig
+from .serverextension import DEFAULT_SYSTEM_PROMPT
 from .agent_handler import AgentHandler
 from .memory_handler import MemoryListHandler, MemoryItemHandler, MemoryExportHandler
 from .context_handler import ContextReadHandler, ContextResolveHandler, ContextListDirHandler
@@ -56,12 +57,14 @@ class BaseConfigHandler(APIHandler):
         """Build safe config dict excluding sensitive data."""
         config = self._get_config()
         return {
-            "apiEndpoint": config.get("apiEndpoint", "https://api.openai.com/v1"),
+            "provider": config.get("provider", "openai"),
+            "providerName": config.get("providerName", "OpenAI"),
+            "apiEndpoint": config.get("apiEndpoint", ""),
             "apiKey": "",  # Never return actual API key
-            "model": config.get("model", "gpt-4o"),
+            "model": config.get("model", ""),
             "temperature": config.get("temperature", 0.7),
             "maxTokens": config.get("maxTokens", 4096),
-            "systemPrompt": config.get("systemPrompt", ""),
+            "systemPrompt": config.get("systemPrompt") or DEFAULT_SYSTEM_PROMPT,
             "enableStreaming": config.get("enableStreaming", True),
             "enableVision": config.get("enableVision", True),
             "hasApiKey": bool(self._get_api_key()),
@@ -96,9 +99,23 @@ class ConfigHandler(BaseConfigHandler):
         debug_data = {k: (v if k != "apiKey" else "***") for k, v in data.items()}
         logger.debug(f"[ConfigHandler] request_body: {json.dumps(debug_data, ensure_ascii=False)[:500]}")
 
-        # Update config store
+        # Check if provider changed - if so, reload provider defaults
+        provider_changed = "provider" in data and data["provider"] != self.config_store.get("provider")
+        if provider_changed:
+            logger.info(f"[ConfigHandler] Provider changed to {data['provider']}, reloading provider defaults")
+            # Get fresh provider defaults
+            from .serverextension import get_provider_defaults
+            provider_defaults = get_provider_defaults(data["provider"])
+            # Update config_store with new provider defaults
+            for key, value in provider_defaults.items():
+                if key not in ["models"]:  # Don't override user's model choice
+                    self.config_store[key] = value
+            self.config_store["provider"] = data["provider"]
+
+        # Update config store with new values from frontend
+        # These override provider defaults (user's choices)
         allowed_keys = [
-            "apiEndpoint", "model", "temperature", "maxTokens",
+            "provider", "apiEndpoint", "model", "temperature", "maxTokens",
             "systemPrompt", "enableStreaming", "enableVision"
         ]
 
@@ -114,8 +131,9 @@ class ConfigHandler(BaseConfigHandler):
             updated_keys.append("apiKey")
 
         logger.info(f"[ConfigHandler] Updated config keys: {updated_keys}")
+        logger.info(f"[ConfigHandler] Final config: provider={self.config_store.get('provider')}, model={self.config_store.get('model')}, apiEndpoint={self.config_store.get('apiEndpoint')}")
 
-        # Persist configuration to disk (including API key)
+        # Persist configuration to disk
         save_cb = self.config_store.get("_save_callback")
         if callable(save_cb):
             save_cb(self.config_store)
@@ -157,14 +175,14 @@ class ChatHandler(BaseConfigHandler):
         """Create LLM client with current config."""
         config = self._get_config()
         return LLMClient(LLMConfig(
-            api_endpoint=config.get("apiEndpoint", "https://api.openai.com/v1"),
+            api_endpoint=config.get("apiEndpoint") or "https://api.openai.com/v1",
             api_key=self._get_api_key(),
-            model=config.get("model", "gpt-4o"),
-            temperature=config.get("temperature", 0.7),
-            max_tokens=config.get("maxTokens", 4096),
-            system_prompt=config.get("systemPrompt", ""),
-            enable_streaming=config.get("enableStreaming", True),
-            enable_vision=config.get("enableVision", True),
+            model=config.get("model") or "gpt-4o",
+            temperature=config.get("temperature") or 0.7,
+            max_tokens=config.get("maxTokens") or 4096,
+            system_prompt=config.get("systemPrompt") or "",
+            enable_streaming=config.get("enableStreaming") if config.get("enableStreaming") is not None else True,
+            enable_vision=config.get("enableVision") if config.get("enableVision") is not None else True,
         ))
 
     @web.authenticated
@@ -259,7 +277,7 @@ class ModelsHandler(BaseConfigHandler):
         try:
             client = AsyncOpenAI(
                 api_key=api_key,
-                base_url=self.config_store.get("apiEndpoint", "https://api.openai.com/v1"),
+                base_url=self.config_store.get("apiEndpoint") or "https://api.openai.com/v1",
                 timeout=120.0,
             )
             models = await client.models.list()
@@ -280,6 +298,34 @@ class ModelsHandler(BaseConfigHandler):
             self.finish(json.dumps({"models": default_models, "error": str(e)}))
 
 
+class ProvidersHandler(BaseConfigHandler):
+    """
+    Handler for listing available LLM providers.
+    """
+
+    @web.authenticated
+    async def get(self):
+        """Get list of available providers and their models."""
+        logger.info("[ProvidersHandler] GET /llm-assistant/providers")
+        from .serverextension import get_providers, get_provider_defaults
+
+        providers = get_providers()
+        provider_list = []
+
+        for pid, pdata in providers.get("providers", {}).items():
+            provider_list.append({
+                "id": pid,
+                "name": pdata.get("name", ""),
+                "apiEndpoint": pdata.get("apiEndpoint", ""),
+                "defaultModel": pdata.get("defaultModel", ""),
+                "supportsStreaming": pdata.get("supportsStreaming", True),
+                "supportsVision": pdata.get("supportsVision", False),
+            })
+
+        logger.info(f"[ProvidersHandler] Returning {len(provider_list)} providers")
+        self.finish(json.dumps({"providers": provider_list}))
+
+
 class TestConnectionHandler(BaseConfigHandler):
     """
     Handler for testing API connection.
@@ -290,10 +336,17 @@ class TestConnectionHandler(BaseConfigHandler):
         """Test the API connection."""
         logger.info("[TestConnectionHandler] GET /llm-assistant/test")
         config = self._get_config()
+        api_endpoint = config.get("apiEndpoint") or "https://api.openai.com/v1"
+        api_key = self._get_api_key()
+        model = config.get("model") or "gpt-4o"
+
+        logger.info(f"[TestConnectionHandler] config_store keys: {list(config.keys())}")
+        logger.info(f"[TestConnectionHandler] Using: api_endpoint={api_endpoint}, api_key={'***' if api_key else 'None'}, model={model}")
+
         client = LLMClient(LLMConfig(
-            api_endpoint=config.get("apiEndpoint", "https://api.openai.com/v1"),
-            api_key=self._get_api_key(),
-            model=config.get("model", "gpt-4o"),
+            api_endpoint=api_endpoint,
+            api_key=api_key,
+            model=model,
         ))
 
         logger.info("[TestConnectionHandler] Testing API connection...")
@@ -319,6 +372,7 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
         (url_path_join(base_url, "/llm-assistant/config"), ConfigHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/config/reload"), ConfigReloadHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/models"), ModelsHandler, {"config_store": config_store}),
+        (url_path_join(base_url, "/llm-assistant/providers"), ProvidersHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/test"), TestConnectionHandler, {"config_store": config_store}),
     ]
 
@@ -345,7 +399,7 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
     routes += [
         (url_path_join(base_url, "/llm-assistant/workspace/info"), WorkspaceInfoHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/assistant-md"), AssistantMdHandler),
-        (url_path_join(base_url, "/llm-assistant/workspace/config"), WorkspaceConfigHandler),
+        (url_path_join(base_url, "/llm-assistant/workspace/config"), WorkspaceConfigHandler, {"config_store": config_store}),
         (url_path_join(base_url, "/llm-assistant/workspace/sessions"), SessionListHandler),
         (url_path_join(base_url, r"/llm-assistant/workspace/sessions/([^/]+)"), SessionItemHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/skills"), SkillListHandler),

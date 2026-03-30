@@ -55,6 +55,7 @@ exclude = [".github", "binder"]
 "install.json" = "share/jupyter/labextensions/jupyterlab-llm-assistant/install.json"
 "schema/plugin.json" = "share/jupyter/lab/schemas/jupyterlab-llm-assistant/plugin.json"
 "etc/jupyter/jupyter_server_config.d/jupyterlab_llm_assistant.json" = "etc/jupyter/jupyter_server_config.d/jupyterlab_llm_assistant.json"
+"jupyterlab_llm_assistant/providers.json" = "jupyterlab_llm_assistant/providers.json"
 
 [tool.hatch.build.hooks.version]
 path = "jupyterlab_llm_assistant/_version.py"
