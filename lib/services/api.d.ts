@@ -1,7 +1,7 @@
 /**
  * API service for communicating with the backend.
  */
-import { LLMSettings, ChatResponse, ConnectionTestResult, ModelsResponse, MessageRole, MessageContent, MemoryEntry, ContextFile } from '../models/types';
+import { LLMSettings, ChatResponse, ConnectionTestResult, ModelsResponse, MessageRole, MessageContent, MemoryEntry, ContextFile, ProviderInfo } from '../models/types';
 /**
  * LLM API Service
  */
@@ -13,7 +13,7 @@ export declare class LLMApiService {
      */
     getConfig(): Promise<LLMSettings>;
     /**
-     * Set configuration
+     * Set configuration - sends complete config by merging with current
      */
     setConfig(settings: Partial<LLMSettings>): Promise<void>;
     /**
@@ -38,6 +38,12 @@ export declare class LLMApiService {
      * Get available models
      */
     getModels(): Promise<ModelsResponse>;
+    /**
+     * Get available providers
+     */
+    getProviders(): Promise<{
+        providers: ProviderInfo[];
+    }>;
     /**
      * Run the coding agent with streaming SSE
      *

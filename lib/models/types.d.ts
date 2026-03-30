@@ -83,6 +83,8 @@ export interface AssistantMessage extends ChatMessage {
  * LLM settings
  */
 export interface LLMSettings {
+    provider?: string;
+    providerName?: string;
     apiEndpoint: string;
     apiKey: string;
     model: string;
@@ -92,6 +94,17 @@ export interface LLMSettings {
     enableStreaming: boolean;
     enableVision: boolean;
     hasApiKey?: boolean;
+}
+/**
+ * Provider info from backend
+ */
+export interface ProviderInfo {
+    id: string;
+    name: string;
+    apiEndpoint: string;
+    defaultModel: string;
+    supportsStreaming: boolean;
+    supportsVision: boolean;
 }
 /**
  * API request body for chat
