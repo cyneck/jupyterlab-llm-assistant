@@ -309,4 +309,39 @@ export interface ContextState {
     selectedPaths: string[];
     rootDir: string;
 }
+/**
+ * A skill manifest loaded from .llm-assistant/skills/
+ */
+export interface Skill {
+    name: string;
+    description: string;
+    version: string;
+    author?: string;
+    enabled: boolean;
+    systemPrompt?: string;
+    tools?: SkillTool[];
+    path?: string;
+    type: 'file' | 'directory';
+}
+/**
+ * A tool defined in a skill manifest
+ */
+export interface SkillTool {
+    name: string;
+    description: string;
+    module?: string;
+    function?: string;
+}
+/**
+ * Skill manifest for installation
+ */
+export interface SkillManifest {
+    name: string;
+    version?: string;
+    description?: string;
+    author?: string;
+    system_prompt?: string;
+    enabled?: boolean;
+    tools?: SkillTool[];
+}
 //# sourceMappingURL=types.d.ts.map

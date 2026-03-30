@@ -538,7 +538,7 @@ export class LLMApiService {
 
   /** List installed skills */
   async listSkills(rootDir = ''): Promise<Array<{
-    name: string; description: string; version: string; enabled: boolean; type: string;
+    name: string; description: string; version: string; enabled: boolean; type: string; path?: string;
   }>> {
     const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
     const r = await fetch(`${this.baseUrl}/workspace/skills${params}`, {
@@ -547,6 +547,142 @@ export class LLMApiService {
     if (!r.ok) throw new Error(`Failed to list skills: ${r.statusText}`);
     const d = await r.json();
     return d.skills ?? [];
+  }
+
+  /** Install a skill from manifest */
+  async installSkill(
+    name: string,
+    manifest: Record<string, any>,
+    rootDir = '',
+  ): Promise<{ ok: boolean; path: string }> {
+    const r = await fetch(`${this.baseUrl}/workspace/skills/install`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ name, manifest, rootDir }),
+    });
+    if (!r.ok) throw new Error(`Failed to install skill: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Update a skill (enable/disable/system_prompt) */
+  async updateSkill(
+    name: string,
+    patch: { enabled?: boolean; system_prompt?: string; description?: string },
+    rootDir = '',
+  ): Promise<{ ok: boolean; skill: any }> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/skills/${encodeURIComponent(name)}${params}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(patch),
+    });
+    if (!r.ok) throw new Error(`Failed to update skill: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Delete a skill */
+  async deleteSkill(name: string, rootDir = ''): Promise<void> {
+    const params = rootDir ? `?rootDir=${encodeURIComponent(rootDir)}` : '';
+    const r = await fetch(`${this.baseUrl}/workspace/skills/${encodeURIComponent(name)}${params}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!r.ok && r.status !== 404) throw new Error(`Failed to delete skill: ${r.statusText}`);
+  }
+
+  // ── Skill Registry (Marketplace) API ───────────────────────────────────
+
+  /** List available skill registries/marketplaces */
+  async listRegistries(): Promise<Array<{
+    id: string;
+    name: string;
+    description: string;
+  }>> {
+    const r = await fetch(`${this.baseUrl}/workspace/registries`, {
+      headers: getHeaders(),
+    });
+    if (!r.ok) throw new Error(`Failed to list registries: ${r.statusText}`);
+    const d = await r.json();
+    return d.registries ?? [];
+  }
+
+  /** Get skills from a specific registry */
+  async getRegistrySkills(registryId: string, refresh = false): Promise<{
+    registry: { id: string; name: string; description: string };
+    skills: Array<{
+      name: string;
+      description: string;
+      url: string;
+      author: string;
+      tags: string[];
+      version: string;
+    }>;
+  }> {
+    const params = refresh ? '?refresh=true' : '';
+    const r = await fetch(
+      `${this.baseUrl}/workspace/registries/${encodeURIComponent(registryId)}${params}`,
+      { headers: getHeaders() },
+    );
+    if (!r.ok) throw new Error(`Failed to get registry skills: ${r.statusText}`);
+    return r.json();
+  }
+
+  /** Install a skill from a GitHub URL or raw manifest URL */
+  async installSkillFromUrl(
+    name: string,
+    url: string,
+    rootDir = '',
+  ): Promise<{ ok: boolean; path: string }> {
+    // Fetch the raw content from the URL
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch skill manifest from URL: ${response.statusText}`);
+    }
+    const content = await response.text();
+
+    // Parse as YAML (simple regex-based extraction)
+    // In a real implementation, you'd use a YAML parser
+    const manifest: Record<string, any> = {};
+    const lines = content.split('\n');
+    let inSystemPrompt = false;
+    let systemPromptLines: string[] = [];
+
+    for (const line of lines) {
+      if (inSystemPrompt) {
+        if (line.startsWith('    ') || line.startsWith('\t')) {
+          systemPromptLines.push(line);
+        } else if (line.trim() === '') {
+          inSystemPrompt = false;
+          manifest['system_prompt'] = systemPromptLines.join('\n').trim();
+        } else {
+          inSystemPrompt = false;
+        }
+      }
+
+      if (line.startsWith('name:')) {
+        manifest['name'] = line.substring(4).trim().replace(/^["']|["']$/g, '');
+      } else if (line.startsWith('version:')) {
+        manifest['version'] = line.substring(8).trim().replace(/^["']|["']$/g, '');
+      } else if (line.startsWith('description:')) {
+        manifest['description'] = line.substring(12).trim().replace(/^["']|["']$/g, '');
+      } else if (line.startsWith('author:')) {
+        manifest['author'] = line.substring(7).trim().replace(/^["']|["']$/g, '');
+      } else if (line.startsWith('system_prompt:')) {
+        const rest = line.substring(14).trim();
+        if (rest === '|' || rest === '>' || rest === '|-' || rest === '>-') {
+          inSystemPrompt = true;
+          systemPromptLines = [];
+        } else {
+          manifest['system_prompt'] = rest.replace(/^["']|["']$/g, '');
+        }
+      } else if (line.startsWith('enabled:')) {
+        manifest['enabled'] = line.substring(8).trim().toLowerCase() === 'true';
+      }
+    }
+
+    manifest['enabled'] = manifest['enabled'] !== false;
+
+    return this.installSkill(name, manifest, rootDir);
   }
 
   // ── Internal SSE stream reader ────────────────────────────────────────────

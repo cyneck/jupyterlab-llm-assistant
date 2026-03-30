@@ -6,7 +6,7 @@ behaviour (tool handling, temperature propagation, SSE event names, etc.).
 """
 
 import json
-from typing import Any, Callable, Coroutine, Dict, List
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from openai import AsyncOpenAI
 
@@ -26,6 +26,7 @@ async def run_agent_loop(
     model: str,
     max_iterations: int,
     config_store: Dict[str, Any],
+    skill_tools: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """
     Core agentic execution loop.
@@ -47,9 +48,15 @@ async def run_agent_loop(
                       The *caller* is responsible for ensuring that any
                       user-supplied settings overrides have already been applied
                       to config_store before calling this function.
+    skill_tools     : optional list of additional tool definitions from skills.
     """
     temperature = config_store.get("temperature", DEFAULT_TEMPERATURE)
     max_tokens = config_store.get("maxTokens", DEFAULT_MAX_TOKENS)
+
+    # Merge default tools with skill tools
+    all_tools = list(AGENT_TOOLS)
+    if skill_tools:
+        all_tools.extend(skill_tools)
 
     for iteration in range(1, max_iterations + 1):
         await send_event("iteration", {"current": iteration, "max": max_iterations})
@@ -61,7 +68,7 @@ async def run_agent_loop(
             stream = await client.chat.completions.create(
                 model=model,
                 messages=api_messages,
-                tools=AGENT_TOOLS,
+                tools=all_tools,
                 tool_choice="auto",
                 stream=True,
                 max_tokens=max_tokens,

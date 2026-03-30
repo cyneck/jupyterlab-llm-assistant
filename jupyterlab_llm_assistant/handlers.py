@@ -26,8 +26,9 @@ from .workspace_handler import (
     SessionItemHandler,
     SkillListHandler,
     SkillInstallHandler,
-    SkillDeleteHandler,
+    SkillItemHandler,
 )
+from .skill_resolver import get_registry_client
 
 # Module-level logger
 logger = logging.getLogger("jupyterlab_llm_assistant.handlers")
@@ -355,6 +356,68 @@ class TestConnectionHandler(BaseConfigHandler):
         self.finish(json.dumps(result))
 
 
+class RegistryListHandler(APIHandler):
+    """
+    Handler for listing available skill registries (marketplaces).
+
+    GET /llm-assistant/workspace/registries
+    → { registries: [{ id, name, description }] }
+    """
+
+    @web.authenticated
+    async def get(self):
+        """List all available registries."""
+        logger.info("[RegistryListHandler] GET /llm-assistant/workspace/registries")
+        client = get_registry_client()
+        registries = client.list_registries()
+        result = [{
+            "id": r.id,
+            "name": r.name,
+            "description": r.description,
+        } for r in registries]
+        logger.info(f"[RegistryListHandler] Returning {len(result)} registries")
+        self.finish(json.dumps({"registries": result}))
+
+
+class RegistrySkillsHandler(APIHandler):
+    """
+    Handler for fetching skills from a specific registry.
+
+    GET /llm-assistant/workspace/registries/<registry_id>
+    → { registry: { id, name, description }, skills: [{ name, description, url, author, tags, version }] }
+    """
+
+    @web.authenticated
+    async def get(self, registry_id: str):
+        """Fetch skills from a registry."""
+        logger.info(f"[RegistrySkillsHandler] GET /llm-assistant/workspace/registries/{registry_id}")
+        client = get_registry_client()
+        force = self.get_query_argument("refresh", "false").lower() == "true"
+
+        registry = await client.fetch_registry(registry_id, force=force)
+        if not registry:
+            logger.warning(f"[RegistrySkillsHandler] Registry not found: {registry_id}")
+            raise web.HTTPError(404, f"Registry not found: {registry_id}")
+
+        result = {
+            "registry": {
+                "id": registry.id,
+                "name": registry.name,
+                "description": registry.description,
+            },
+            "skills": [{
+                "name": s.name,
+                "description": s.description,
+                "url": s.url,
+                "author": s.author,
+                "tags": s.tags,
+                "version": s.version,
+            } for s in registry.skills],
+        }
+        logger.info(f"[RegistrySkillsHandler] Returning {len(registry.skills)} skills from {registry_id}")
+        self.finish(json.dumps(result))
+
+
 def setup_handlers(web_app, config_store: Dict[str, Any]):
     """
     Set up the HTTP handlers for the extension.
@@ -404,7 +467,10 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
         (url_path_join(base_url, r"/llm-assistant/workspace/sessions/([^/]+)"), SessionItemHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/skills"), SkillListHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/skills/install"), SkillInstallHandler),
-        (url_path_join(base_url, r"/llm-assistant/workspace/skills/([^/]+)"), SkillDeleteHandler),
+        (url_path_join(base_url, r"/llm-assistant/workspace/skills/([^/]+)"), SkillItemHandler),
+        # Skill marketplace/registry routes
+        (url_path_join(base_url, "/llm-assistant/workspace/registries"), RegistryListHandler),
+        (url_path_join(base_url, r"/llm-assistant/workspace/registries/([^/]+)"), RegistrySkillsHandler),
     ]
 
     for route_pattern, handler, *handler_args_list in routes:

@@ -481,7 +481,12 @@ class SkillListHandler(APIHandler):
 class SkillInstallHandler(APIHandler):
     """
     POST /llm-assistant/workspace/skills/install
-    body: { name, manifest }   — manifest is a YAML string or dict
+    body: { name?, url?, manifest? }
+
+    Supports three installation methods:
+    1. From manifest dict: { name: "my-skill", manifest: { name: "...", ... } }
+    2. From URL: { url: "https://github.com/..." }
+    3. From GitHub shorthand: { url: "github:user/repo/skill-name" }
     """
 
     @web.authenticated
@@ -492,30 +497,96 @@ class SkillInstallHandler(APIHandler):
             raise web.HTTPError(400, "Invalid JSON")
 
         root_dir = body.get("rootDir", "")
-        name: str = body.get("name", "").strip()
-        if not name:
-            raise web.HTTPError(400, "name is required")
+        ws = _workspace_dir(root_dir)
+        _ensure_dirs(ws)
+        skills_dir = ws / SKILLS_DIR_NAME
 
-        manifest_raw = body.get("manifest", "")
+        url = body.get("url", "").strip()
+        name = body.get("name", "").strip()
+        manifest_raw = body.get("manifest")
+
+        if url:
+            # Install from URL
+            try:
+                from .skill_resolver import install_skill_from_url, is_github_url
+
+                # Handle GitHub shorthand syntax: github:user/repo/skill-name
+                if url.startswith('github:'):
+                    parts = url[7:].split('/')
+                    if len(parts) >= 3:
+                        user, repo, skill_name = parts[0], parts[1], '/'.join(parts[2:])
+                        url = f"https://github.com/{user}/{repo}/tree/main/{skill_name}"
+                    else:
+                        raise web.HTTPError(400, "Invalid GitHub shorthand format. Use: github:user/repo/skill-name")
+
+                # Resolve GitHub URLs
+                if is_github_url(url):
+                    from .skill_resolver import GitHubURLResolver
+                    resolved_url, _ = GitHubURLResolver.resolve(url)
+                    if not resolved_url:
+                        # It's a directory URL, resolve_skill_from_url will handle it
+                        resolved_url = url
+
+                final_name, path = install_skill_from_url(
+                    skill_url=url,
+                    target_dir=skills_dir,
+                    skill_name=name or None,
+                )
+
+                self.finish(json.dumps({
+                    "ok": True,
+                    "path": str(path),
+                    "name": final_name,
+                    "source": "url" if not is_github_url(url) else "github",
+                }))
+                return
+
+            except Exception as e:
+                raise web.HTTPError(500, f"Failed to install skill from URL: {e}")
+
+        # Install from manifest
+        if manifest_raw is None:
+            raise web.HTTPError(400, "Either 'url' or 'manifest' is required")
+
+        if not name:
+            raise web.HTTPError(400, "name is required when installing from manifest")
+
         if isinstance(manifest_raw, dict):
             manifest_str = yaml.dump(manifest_raw)
         else:
             manifest_str = str(manifest_raw)
 
-        ws = _workspace_dir(root_dir)
-        _ensure_dirs(ws)
-        skills_dir = ws / SKILLS_DIR_NAME
-
         path = skills_dir / f"{name}.yaml"
         path.write_text(manifest_str, encoding="utf-8")
 
-        self.finish(json.dumps({"ok": True, "path": str(path)}))
+        self.finish(json.dumps({"ok": True, "path": str(path), "name": name}))
 
 
-# ── SkillDeleteHandler ─────────────────────────────────────────────────────────
+# ── SkillItemHandler ────────────────────────────────────────────────────────────
 
-class SkillDeleteHandler(APIHandler):
-    """DELETE /llm-assistant/workspace/skills/<name>"""
+class SkillItemHandler(APIHandler):
+    """
+    DELETE /llm-assistant/workspace/skills/<name>  — delete a skill
+    PATCH /llm-assistant/workspace/skills/<name>  — update a skill (enable/disable/system_prompt)
+    """
+
+    def _find_skill_path(self, skills_dir: Path, skill_name: str) -> Optional[tuple]:
+        """Find the skill file path and return (path, type) or None."""
+        # Check single-file skills
+        for ext in (".yaml", ".yml"):
+            path = skills_dir / f"{skill_name}{ext}"
+            if path.exists():
+                return (path, "file")
+
+        # Check directory skills
+        dir_path = skills_dir / skill_name
+        if dir_path.is_dir():
+            for manifest_name in ("skill.yaml", "skill.yml"):
+                manifest_path = dir_path / manifest_name
+                if manifest_path.exists():
+                    return (manifest_path, "directory")
+
+        return None
 
     @web.authenticated
     async def delete(self, skill_name: str):
@@ -539,6 +610,49 @@ class SkillDeleteHandler(APIHandler):
             raise web.HTTPError(404, f"Skill not found: {skill_name}")
 
         self.finish(json.dumps({"ok": True}))
+
+    @web.authenticated
+    async def patch(self, skill_name: str):
+        root_dir = self.get_argument("rootDir", "")
+        ws = _workspace_dir(root_dir)
+        skills_dir = ws / SKILLS_DIR_NAME
+
+        # Find the skill file
+        result = self._find_skill_path(skills_dir, skill_name)
+        if not result:
+            raise web.HTTPError(404, f"Skill not found: {skill_name}")
+
+        skill_path, skill_type = result
+
+        # Load current manifest
+        try:
+            manifest = yaml.safe_load(skill_path.read_text(encoding="utf-8")) or {}
+        except Exception as e:
+            raise web.HTTPError(500, f"Failed to read skill manifest: {e}")
+
+        # Parse request body
+        try:
+            body = json.loads(self.request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            raise web.HTTPError(400, "Invalid JSON")
+
+        # Update fields
+        if "enabled" in body:
+            manifest["enabled"] = bool(body["enabled"])
+        if "system_prompt" in body:
+            manifest["system_prompt"] = str(body["system_prompt"])
+        if "description" in body:
+            manifest["description"] = str(body["description"])
+
+        # Write back
+        try:
+            skill_path.write_text(yaml.dump(manifest), encoding="utf-8")
+        except Exception as e:
+            raise web.HTTPError(500, f"Failed to write skill manifest: {e}")
+
+        # Return updated skill info
+        skill = SkillManifest.from_yaml(manifest, str(skill_path), skill_type)
+        self.finish(json.dumps({"ok": True, "skill": skill.to_dict()}))
 
 
 # ── AssistantMdLoaderMixin ─────────────────────────────────────────────────────
@@ -576,3 +690,251 @@ def load_user_config() -> Dict[str, Any]:
         except Exception:
             return {}
     return {}
+
+
+# ── Skill Loading & Application ─────────────────────────────────────────────────
+
+class SkillManifest:
+    """Represents a loaded skill manifest."""
+
+    def __init__(
+        self,
+        name: str,
+        version: str = "",
+        description: str = "",
+        author: str = "",
+        enabled: bool = True,
+        system_prompt: str = "",
+        tools: Optional[List[Dict[str, Any]]] = None,
+        path: str = "",
+        skill_type: str = "file",
+    ):
+        self.name = name
+        self.version = version
+        self.description = description
+        self.author = author
+        self.enabled = enabled
+        self.system_prompt = system_prompt
+        self.tools = tools or []
+        self.path = path
+        self.type = skill_type
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "description": self.description,
+            "author": self.author,
+            "enabled": self.enabled,
+            "systemPrompt": self.system_prompt,
+            "tools": self.tools,
+            "path": self.path,
+            "type": self.type,
+        }
+
+    @classmethod
+    def from_yaml(cls, data: Dict[str, Any], path: str, skill_type: str = "file") -> "SkillManifest":
+        return cls(
+            name=data.get("name", Path(path).stem),
+            version=data.get("version", ""),
+            description=data.get("description", ""),
+            author=data.get("author", ""),
+            enabled=data.get("enabled", True),
+            system_prompt=data.get("system_prompt", ""),
+            tools=data.get("tools", []),
+            path=path,
+            skill_type=skill_type,
+        )
+
+
+def load_skills(root_dir: str = "") -> List[SkillManifest]:
+    """
+    Load all skill manifests from the .llm-assistant/skills/ directory.
+
+    Supports two formats:
+    - Single-file: skills/<name>.yaml
+    - Directory: skills/<name>/skill.yaml
+
+    Returns only enabled skills.
+    """
+    ws = _workspace_dir(root_dir)
+    skills_dir = ws / SKILLS_DIR_NAME
+    skills: List[SkillManifest] = []
+
+    if not skills_dir.exists():
+        return skills
+
+    # Load single-file skills
+    for f in skills_dir.glob("*.yaml"):
+        try:
+            manifest = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            skill = SkillManifest.from_yaml(manifest, str(f), "file")
+            if skill.enabled:
+                skills.append(skill)
+        except Exception:
+            continue
+
+    for f in skills_dir.glob("*.yml"):
+        try:
+            manifest = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            skill = SkillManifest.from_yaml(manifest, str(f), "file")
+            if skill.enabled:
+                skills.append(skill)
+        except Exception:
+            continue
+
+    # Load directory skills
+    for d in skills_dir.iterdir():
+        if not d.is_dir():
+            continue
+        for manifest_name in ("skill.yaml", "skill.yml"):
+            manifest_path = d / manifest_name
+            if manifest_path.exists():
+                try:
+                    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+                    skill = SkillManifest.from_yaml(manifest, str(d), "directory")
+                    if skill.enabled:
+                        skills.append(skill)
+                except Exception:
+                    continue
+                break
+
+    return skills
+
+
+def load_skill_manifests(root_dir: str = "") -> List[SkillManifest]:
+    """
+    Load all skill manifests (including disabled) from the .llm-assistant/skills/ directory.
+    Returns all skills regardless of enabled status.
+    """
+    ws = _workspace_dir(root_dir)
+    skills_dir = ws / SKILLS_DIR_NAME
+    skills: List[SkillManifest] = []
+
+    if not skills_dir.exists():
+        return skills
+
+    # Load single-file skills
+    for f in skills_dir.glob("*.yaml"):
+        try:
+            manifest = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            skill = SkillManifest.from_yaml(manifest, str(f), "file")
+            skills.append(skill)
+        except Exception:
+            continue
+
+    for f in skills_dir.glob("*.yml"):
+        try:
+            manifest = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            skill = SkillManifest.from_yaml(manifest, str(f), "file")
+            skills.append(skill)
+        except Exception:
+            continue
+
+    # Load directory skills
+    for d in skills_dir.iterdir():
+        if not d.is_dir():
+            continue
+        for manifest_name in ("skill.yaml", "skill.yml"):
+            manifest_path = d / manifest_name
+            if manifest_path.exists():
+                try:
+                    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+                    skill = SkillManifest.from_yaml(manifest, str(d), "directory")
+                    skills.append(skill)
+                except Exception:
+                    continue
+                break
+
+    return skills
+
+
+def apply_skills_to_system_prompt(
+    base_system_prompt: str,
+    root_dir: str = "",
+    include_memory: bool = True,
+) -> str:
+    """
+    Build an enriched system prompt by injecting enabled skill system_prompts.
+
+    Format:
+    <base_system_prompt>
+
+    <!-- Skill: <skill_name> -->
+    <skill_system_prompt>
+    <!-- EndSkill: <skill_name> -->
+
+    ... for each enabled skill
+
+    Also injects skill tools as JSON in a comment block for the LLM to use.
+    """
+    skills = load_skills(root_dir)
+
+    if not skills and not include_memory:
+        return base_system_prompt
+
+    # Load memory if requested
+    memory_text = ""
+    if include_memory:
+        try:
+            from .memory_handler import get_memory_store
+            memory_store = get_memory_store()
+            memory_text = memory_store.export_as_text()
+        except Exception:
+            memory_text = ""
+
+    # Build enriched system prompt
+    result = base_system_prompt
+
+    # Collect skill tools for injection
+    all_skill_tools = []
+
+    # Inject skill system prompts and collect tools
+    for skill in skills:
+        if skill.system_prompt:
+            result += f"\n\n<!-- Skill: {skill.name} -->\n{skill.system_prompt}\n<!-- EndSkill: {skill.name} -->"
+
+        # Collect tool definitions from skill
+        if skill.tools:
+            for tool in skill.tools:
+                if tool.get('name'):
+                    all_skill_tools.append(tool)
+
+    # Inject skill tools as JSON (for LLM to understand available functions)
+    if all_skill_tools:
+        tools_json = json.dumps(all_skill_tools, indent=2)
+        result += f"\n\n<!-- Skill Tools -->\n{tools_json}\n<!-- EndSkillTools -->"
+
+    # Inject memory
+    if memory_text:
+        result += f"\n\n<!-- Memory -->\n{memory_text}\n<!-- EndMemory -->"
+
+    return result
+
+
+def get_skill_tools_for_agent(root_dir: str = "") -> List[Dict[str, Any]]:
+    """
+    Get all tool definitions from enabled skills.
+
+    Returns list of tool definitions in OpenAI function format.
+    """
+    from .skill_resolver import get_skill_tool_loader
+
+    skills = load_skills(root_dir)
+    all_tools = []
+
+    # Get skill tool loader
+    ws = _workspace_dir(root_dir)
+    skills_dir = ws / SKILLS_DIR_NAME
+
+    if not skills_dir.exists():
+        return all_tools
+
+    loader = get_skill_tool_loader(skills_dir)
+
+    # Load tools from each enabled skill
+    for skill in skills:
+        tools = loader.load_skill_tools(skill.name)
+        all_tools.extend(tools)
+
+    return all_tools

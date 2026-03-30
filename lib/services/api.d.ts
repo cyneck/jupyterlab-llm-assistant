@@ -172,7 +172,51 @@ export declare class LLMApiService {
         version: string;
         enabled: boolean;
         type: string;
+        path?: string;
     }>>;
+    /** Install a skill from manifest */
+    installSkill(name: string, manifest: Record<string, any>, rootDir?: string): Promise<{
+        ok: boolean;
+        path: string;
+    }>;
+    /** Update a skill (enable/disable/system_prompt) */
+    updateSkill(name: string, patch: {
+        enabled?: boolean;
+        system_prompt?: string;
+        description?: string;
+    }, rootDir?: string): Promise<{
+        ok: boolean;
+        skill: any;
+    }>;
+    /** Delete a skill */
+    deleteSkill(name: string, rootDir?: string): Promise<void>;
+    /** List available skill registries/marketplaces */
+    listRegistries(): Promise<Array<{
+        id: string;
+        name: string;
+        description: string;
+    }>>;
+    /** Get skills from a specific registry */
+    getRegistrySkills(registryId: string, refresh?: boolean): Promise<{
+        registry: {
+            id: string;
+            name: string;
+            description: string;
+        };
+        skills: Array<{
+            name: string;
+            description: string;
+            url: string;
+            author: string;
+            tags: string[];
+            version: string;
+        }>;
+    }>;
+    /** Install a skill from a GitHub URL or raw manifest URL */
+    installSkillFromUrl(name: string, url: string, rootDir?: string): Promise<{
+        ok: boolean;
+        path: string;
+    }>;
     /** Internal SSE stream reader */
     private _readSSEStream;
 }

@@ -15,6 +15,7 @@ import { InputArea, AttachedPath } from './InputArea';
 import { SettingsPanel } from './SettingsPanel';
 import { MemoryPanel } from './MemoryPanel';
 import { SessionPanel } from './SessionPanel';
+import { SkillPanel } from './SkillPanel';
 import { UnifiedMessageList } from './UnifiedMessageList';
 import { LLMApiService } from '../services/api';
 
@@ -114,6 +115,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   const [showSettings, setShowSettings] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [showSession, setShowSession] = useState(false);
+  const [showSkill, setShowSkill] = useState(false);
   const [currentSettings, setCurrentSettings] = useState<LLMSettings>(settings);
   const [sendMode, setSendMode] = useState<MessageMode>('agent');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -539,13 +541,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
           </svg>
         </button>
-        {!showSettings && !showMemory && !showSession && (
+        {!showSettings && !showMemory && !showSession && !showSkill && (
           <button className="llm-header-btn" onClick={handleClear} title="Clear chat">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
             </svg>
           </button>
         )}
+        <button
+          className={`llm-header-btn ${showSkill ? 'active' : ''}`}
+          onClick={() => setShowSkill(v => !v)}
+          title="Skills"
+        >
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
+            <path d="M7.5 4C5.57 4 4 5.57 4 7.5S5.57 11 7.5 11 11 9.43 11 7.5 9.43 4 7.5 4zm0 5C6.67 9 6 9.67 6 10.5S6.67 12 7.5 12 9 11.33 9 10.5 8.33 9 7.5 9zm4.5 4C10.67 13 10 13.67 10 14.5S10.67 16 11.5 16s1.5-.67 1.5-1.5S12.33 13 11.5 13zm4.5 4c-1.83 0-3.5.67-3.5 1.5s1.67 1.5 3.5 1.5 3.5-.67 3.5-1.5-1.67-1.5-3.5-1.5z"/>
+          </svg>
+        </button>
         <button
           className={`llm-header-btn ${showSettings ? 'active' : ''}`}
           onClick={() => setShowSettings(true)}
@@ -592,6 +603,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
           onClose={() => setShowSession(false)}
           onLoadSession={handleLoadSession}
           onNewSession={handleNewSession}
+          rootDir={rootDir}
+          onRootDirChange={handleRootDirChange}
+        />
+      </div>
+    );
+  }
+
+  if (showSkill) {
+    return (
+      <div className="llm-chat-panel">
+        {header}
+        <SkillPanel
+          onClose={() => setShowSkill(false)}
           rootDir={rootDir}
           onRootDirChange={handleRootDirChange}
         />
