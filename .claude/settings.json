@@ -10,7 +10,10 @@
       "Read(//root/.llm-assistant/**)",
       "Bash(twine check:*)",
       "Bash(twine upload:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(grep -rn 0.1.2 . --include=*.json --include=*.py)",
+      "Bash(unzip -l dist/jupyterlab_llm_assistant-0.1.3-py3-none-any.whl)",
+      "Bash(unzip -p dist/jupyterlab_llm_assistant-0.1.3-py3-none-any.whl jupyterlab_llm_assistant/_version.py)"
     ]
   }
 }
