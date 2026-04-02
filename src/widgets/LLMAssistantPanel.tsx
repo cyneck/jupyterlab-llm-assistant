@@ -82,9 +82,7 @@ const ChatPanelWrapper: React.FC<ChatPanelWrapperProps> = ({
 
   useEffect(() => {
     // Load settings on mount
-    console.log('[ChatPanelWrapper] Loading settings on mount...');
     settingsModel.loadSettings().then((loaded) => {
-      console.log('[ChatPanelWrapper] Settings loaded:', JSON.stringify(loaded, null, 2));
       setSettings(loaded);
     });
 

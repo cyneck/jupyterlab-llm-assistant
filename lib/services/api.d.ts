@@ -13,7 +13,7 @@ export declare class LLMApiService {
      */
     getConfig(): Promise<LLMSettings>;
     /**
-     * Set configuration - sends complete config by merging with current
+     * Set configuration - sends partial settings directly (backend merges with current)
      */
     setConfig(settings: Partial<LLMSettings>): Promise<void>;
     /**
@@ -133,8 +133,6 @@ export declare class LLMApiService {
         config: Record<string, any>;
         path: string;
     }>;
-    /** Save workspace config (per-project settings in .llm-assistant/config.json) */
-    setWorkspaceConfig(config: Record<string, any>, rootDir?: string): Promise<void>;
     /** List saved sessions */
     listSessions(rootDir?: string): Promise<Array<{
         id: string;

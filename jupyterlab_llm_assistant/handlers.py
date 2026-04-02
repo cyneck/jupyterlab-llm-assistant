@@ -84,25 +84,17 @@ class ConfigHandler(BaseConfigHandler):
     @web.authenticated
     async def get(self):
         """Get current configuration (excluding sensitive data), synced with disk."""
-        # Always reload from disk to ensure consistency
         from .serverextension import _reload_config
         _reload_config()
-        logger.info("[ConfigHandler] GET /llm-assistant/config (synced with disk)")
         self.finish(json.dumps(self._build_safe_config()))
 
     @web.authenticated
     async def post(self):
         """Update configuration."""
-        logger.info("[ConfigHandler] POST /llm-assistant/config")
         try:
             data = json.loads(self.request.body.decode("utf-8"))
         except json.JSONDecodeError:
-            logger.warning("[ConfigHandler] Invalid JSON in request body")
             raise web.HTTPError(400, "Invalid JSON")
-
-        # Debug: log request body (mask apiKey)
-        debug_data = {k: (v if k != "apiKey" else "***") for k, v in data.items()}
-        logger.debug(f"[ConfigHandler] request_body: {json.dumps(debug_data, ensure_ascii=False)[:500]}")
 
         # Merge entire request body into config_store (skip internal keys)
         for key in list(data.keys()):
@@ -113,7 +105,6 @@ class ConfigHandler(BaseConfigHandler):
         save_cb = self.config_store.get("_save_callback")
         if callable(save_cb):
             save_cb(self.config_store)
-            logger.info("[ConfigHandler] Config persisted to disk")
 
         self.finish(json.dumps(self._build_safe_config()))
 

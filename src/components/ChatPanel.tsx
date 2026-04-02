@@ -153,14 +153,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings, 
   }, []);
 
   // Sync external settings prop with local currentSettings state
-  // This ensures settings loaded from server are reflected in the UI
   useEffect(() => {
-    console.log('[ChatPanel] settings prop changed:', JSON.stringify(settings, null, 2));
-    setCurrentSettings(prev => {
-      const merged = { ...prev, ...settings };
-      console.log('[ChatPanel] currentSettings updated:', JSON.stringify(merged, null, 2));
-      return merged;
-    });
+    setCurrentSettings(prev => ({ ...prev, ...settings }));
   }, [settings]);
 
   // Persist messages to backend when changed

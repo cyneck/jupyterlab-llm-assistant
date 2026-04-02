@@ -71,7 +71,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   // Update local settings when props change (preserve apiKey)
   useEffect(() => {
-    console.log('[SettingsPanel] Settings prop changed:', JSON.stringify(settings, null, 2));
     setLocalSettings((prev) => ({
       ...settings,
       apiKey: prev.apiKey, // Never overwrite user input
