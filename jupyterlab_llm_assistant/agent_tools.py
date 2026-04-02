@@ -218,6 +218,18 @@ class AgentToolExecutor:
             root_dir: Root directory for file operations. Defaults to cwd.
         """
         self.root_dir = root_dir or os.getcwd()
+        # Registry of skill tool functions: { tool_name: callable }
+        self._skill_tools: Dict[str, callable] = {}
+
+    def register_skill_tool(self, tool_name: str, func: callable) -> None:
+        """
+        Register a skill tool function.
+
+        Args:
+            tool_name: Name of the tool
+            func: Callable that takes tool_args dict and returns (success, result)
+        """
+        self._skill_tools[tool_name] = func
 
     def _resolve_path(self, path: str) -> str:
         """Resolve a path relative to the root directory.
@@ -252,6 +264,21 @@ class AgentToolExecutor:
             Tuple of (success, result)
         """
         try:
+            # Check if it's a registered skill tool
+            if tool_name in self._skill_tools:
+                func = self._skill_tools[tool_name]
+                try:
+                    result = func(tool_args)
+                    # Handle both sync and async functions
+                    if hasattr(result, '__await__'):
+                        result = await result
+                    if isinstance(result, tuple) and len(result) == 2:
+                        return result
+                    else:
+                        return True, str(result)
+                except Exception as e:
+                    return False, f"Skill tool error: {str(e)}"
+
             if tool_name == "read_file":
                 return await self._read_file(**tool_args)
             elif tool_name == "write_file":

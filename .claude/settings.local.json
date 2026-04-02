@@ -1,4 +1,18 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Backend code changed, restarting JupyterLab...' && pkill -f 'jupyter-lab' 2>/dev/null; sleep 2; pip install -e . --force-reinstall --no-deps && nohup jupyter lab --allow-root --no-browser --NotebookApp.token='' --NotebookApp.password='' > /tmp/jupyter.log 2>&1 &",
+            "if": "Edit(*jupyterlab_llm_assistant/*.py)"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "WebFetch(domain:github.com)",
@@ -39,7 +53,12 @@
       "Bash(__NEW_LINE_ce8894595b7929f1__ echo:*)",
       "Bash(__NEW_LINE_d3ca1545d8def3e9__ echo:*)",
       "Bash(__NEW_LINE_654b2fd63903556b__ echo:*)",
-      "Bash(__NEW_LINE_e6d7b796c033910a__ echo:*)"
+      "Bash(__NEW_LINE_e6d7b796c033910a__ echo:*)",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebSearch",
+      "Bash(pkill -f jupyter-lab)",
+      "Bash(git status:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

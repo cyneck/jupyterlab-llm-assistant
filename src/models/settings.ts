@@ -1,7 +1,8 @@
 /**
  * Settings model for managing LLM settings.
  *
- * Uses workspace config (.llm-assistant/config.json) for persistence.
+ * Uses user-level config (~/.llm-assistant/config.json) for persistence.
+ * Project-level overrides (.llm-assistant/config.json) are handled separately.
  */
 
 import { Signal } from '@lumino/signaling';
@@ -28,7 +29,6 @@ export const DEFAULT_SETTINGS: LLMSettings = {
 export class SettingsModel {
   private _settings: LLMSettings;
   private _apiService: LLMApiService;
-  private _rootDir: string = '';
 
   /**
    * Signal emitted when settings change
@@ -48,14 +48,7 @@ export class SettingsModel {
   }
 
   /**
-   * Set root directory for workspace config
-   */
-  setRootDir(rootDir: string): void {
-    this._rootDir = rootDir;
-  }
-
-  /**
-   * Update settings
+   * Update settings locally (without persisting)
    */
   updateSettings(updates: Partial<LLMSettings>): void {
     this._settings = { ...this._settings, ...updates };
@@ -63,24 +56,22 @@ export class SettingsModel {
   }
 
   /**
-   * Load settings from workspace config (.llm-assistant/config.json)
+   * Load settings from user-level config (~/.llm-assistant/config.json)
    */
   async loadSettings(): Promise<LLMSettings> {
     try {
-      const wsConfig = await this._apiService.getWorkspaceConfig(this._rootDir);
-      const wsSettings = wsConfig.config || {};
-      // Merge with defaults and server config
       const serverConfig = await this._apiService.getConfig();
+      console.log('[SettingsModel] Loaded from server:', JSON.stringify(serverConfig, null, 2));
+      // Only use systemPrompt if it's non-empty, otherwise keep DEFAULT_SETTINGS
+      const effectiveSystemPrompt = serverConfig.systemPrompt || DEFAULT_SETTINGS.systemPrompt;
       this._settings = {
         ...DEFAULT_SETTINGS,
         ...serverConfig,
-        ...wsSettings,
-        // Preserve hasApiKey from server config
-        hasApiKey: serverConfig.hasApiKey,
-        // Don't load apiKey from workspace (security)
-        apiKey: wsSettings.apiKey || '',
+        systemPrompt: effectiveSystemPrompt,
+        // Don't load apiKey from server (security - it returns empty string)
+        apiKey: '',
       };
-      this.settingsChanged.emit(this._settings);
+      console.log('[SettingsModel] Merged settings:', JSON.stringify(this._settings, null, 2));
       return this._settings;
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -89,30 +80,21 @@ export class SettingsModel {
   }
 
   /**
-   * Save settings to workspace config (.llm-assistant/config.json)
-   * Also saves apiKey to server config_store
+   * Save settings to user-level config (~/.llm-assistant/config.json)
    */
   async saveSettings(settings: Partial<LLMSettings>): Promise<void> {
-    // Save apiKey to server config_store if provided
-    if (settings.apiKey !== undefined) {
-      try {
-        await this._apiService.setConfig({ apiKey: settings.apiKey });
-      } catch (err) {
-        console.error('Failed to save API key to server:', err);
-      }
-    }
-
-    // Filter out sensitive fields for workspace config
-    const wsSettings: Partial<LLMSettings> = {};
-    const allowedKeys = ['model', 'temperature', 'maxTokens', 'systemPrompt', 'enableStreaming', 'enableVision', 'apiEndpoint'];
-    for (const key of allowedKeys) {
-      if (key in settings) {
-        (wsSettings as any)[key] = (settings as any)[key];
-      }
-    }
-
     try {
-      await this._apiService.setWorkspaceConfig(wsSettings as Record<string, any>, this._rootDir);
+      // Don't save empty apiKey to avoid overwriting existing key on server
+      const settingsToSave: Partial<LLMSettings> = {};
+      for (const [key, value] of Object.entries(settings)) {
+        if (key === 'apiKey' && (!value || value === '')) {
+          // Skip empty apiKey to preserve existing key on server
+          continue;
+        }
+        (settingsToSave as any)[key] = value;
+      }
+
+      await this._apiService.setConfig(settingsToSave);
       this._settings = { ...this._settings, ...settings };
       this.settingsChanged.emit(this._settings);
     } catch (err) {

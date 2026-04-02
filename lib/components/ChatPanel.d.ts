@@ -12,6 +12,7 @@ import { LLMSettings } from '../models/types';
 export interface ChatPanelProps {
     settings: LLMSettings;
     onOpenSettings: () => void;
+    onSettingsChange?: (settings: Partial<LLMSettings>) => Promise<void>;
 }
 export declare const ChatPanel: React.FC<ChatPanelProps>;
 export default ChatPanel;

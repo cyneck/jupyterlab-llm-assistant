@@ -71,27 +71,34 @@ interface ChatPanelWrapperProps {
   onSettingsChange: (settings: LLMSettings) => void;
 }
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const ChatPanelWrapper: React.FC<ChatPanelWrapperProps> = ({
   settingsModel,
   onSettingsChange,
 }) => {
   const [settings, setSettings] = useState<LLMSettings>(settingsModel.settings);
+  const settingsChangedRef = useRef<((_: any, newSettings: LLMSettings) => void) | null>(null);
 
   useEffect(() => {
     // Load settings on mount
+    console.log('[ChatPanelWrapper] Loading settings on mount...');
     settingsModel.loadSettings().then((loaded) => {
+      console.log('[ChatPanelWrapper] Settings loaded:', JSON.stringify(loaded, null, 2));
       setSettings(loaded);
     });
 
-    // Subscribe to settings changes
-    settingsModel.settingsChanged.connect((_, newSettings) => {
+    // Subscribe to settings changes (use ref to hold stable function reference)
+    settingsChangedRef.current = (_: any, newSettings: LLMSettings) => {
       setSettings(newSettings);
-    });
+    };
+    settingsModel.settingsChanged.connect(settingsChangedRef.current);
 
     return () => {
-      // Cleanup
+      // Cleanup: disconnect signal listener to prevent stale closures
+      if (settingsChangedRef.current) {
+        settingsModel.settingsChanged.disconnect(settingsChangedRef.current);
+      }
     };
   }, [settingsModel]);
 
@@ -111,6 +118,7 @@ const ChatPanelWrapper: React.FC<ChatPanelWrapperProps> = ({
     <ChatPanel
       settings={settings}
       onOpenSettings={handleOpenSettings}
+      onSettingsChange={handleSettingsChange}
     />
   );
 };

@@ -24,6 +24,7 @@ from openai import AsyncOpenAI
 from .agent_tools import AGENT_TOOLS, AgentToolExecutor
 from .agent_loop import run_agent_loop
 from .memory_handler import get_memory_store
+from .workspace_handler import apply_skills_to_system_prompt, get_skill_tools_for_agent, load_skills, _workspace_dir
 
 
 # Agent system prompt
@@ -162,13 +163,33 @@ class AgentHandler(APIHandler):
         executor = AgentToolExecutor(root_dir=root_dir)
 
         # Build initial message list with system prompt
-        # Inject active memories into the system prompt
-        memory_store = get_memory_store()
-        memory_text = memory_store.export_as_text()
+        # Apply skills (including system prompts and custom tools)
+        system_content = apply_skills_to_system_prompt(
+            AGENT_SYSTEM_PROMPT,
+            root_dir=root_dir,
+            include_memory=True,
+        )
 
-        system_content = AGENT_SYSTEM_PROMPT
-        if memory_text:
-            system_content = AGENT_SYSTEM_PROMPT + "\n\n" + memory_text
+        # Get skill tools for agent execution
+        skill_tools = get_skill_tools_for_agent(root_dir=root_dir)
+
+        # Register skill tools with executor
+        if skill_tools:
+            from .skill_resolver import get_skill_tool_loader
+            ws = _workspace_dir(root_dir)
+            skills_dir = ws / SKILLS_DIR_NAME
+            loader = get_skill_tool_loader(skills_dir)
+
+            # Get skill tool functions and register them
+            skills = load_skills(root_dir)
+            for skill in skills:
+                tool_funcs = loader.load_skill_tools(skill.name)
+                for tool_def in tool_funcs:
+                    tool_name = tool_def.get('function', {}).get('name')
+                    if tool_name:
+                        func = loader.get_tool_function(skill.name, tool_name)
+                        if func:
+                            executor.register_skill_tool(tool_name, func)
 
         api_messages = [
             {"role": "system", "content": system_content}
@@ -183,6 +204,7 @@ class AgentHandler(APIHandler):
                 model=model,
                 max_iterations=max_iterations,
                 config_store=effective_config,
+                skill_tools=skill_tools if skill_tools else None,
             )
         except Exception as e:
             await self._send_event("error", {"message": str(e)})

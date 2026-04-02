@@ -2,8 +2,9 @@
  * Settings panel component.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { LLMSettings, ConnectionTestResult } from '../models/types';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { LLMSettings, ConnectionTestResult, ProviderInfo } from '../models/types';
+import { LLMApiService } from '../services/api';
 
 export interface SettingsPanelProps {
   settings: LLMSettings;
@@ -12,21 +13,6 @@ export interface SettingsPanelProps {
   onTestConnection: () => Promise<ConnectionTestResult>;
   isTestingConnection: boolean;
 }
-
-/**
- * API Provider options with default endpoints
- */
-const PROVIDER_OPTIONS = [
-  { value: 'openai', label: 'OpenAI', endpoint: 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
-  { value: 'anthropic', label: 'Anthropic (Claude)', endpoint: 'https://api.anthropic.com/v1', defaultModel: 'claude-3-sonnet-20240229' },
-  { value: 'ollama', label: 'Ollama (Local)', endpoint: 'http://localhost:11434/v1', defaultModel: 'llama3' },
-  { value: 'deepseek', label: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
-  { value: 'qianwen', label: '阿里云通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-turbo' },
-  { value: 'zhipu', label: '智谱AI', endpoint: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-4' },
-  { value: 'moonshot', label: 'Moonshot (月之暗面)', endpoint: 'https://api.moonshot.cn/v1', defaultModel: 'moonshot-v1-8k' },
-  { value: 'siliconflow', label: 'SiliconFlow', endpoint: 'https://api.siliconflow.cn/v1', defaultModel: 'Qwen/Qwen2-7B-Instruct' },
-  { value: 'custom', label: 'Custom (自定义)', endpoint: '', defaultModel: '' },
-];
 
 /**
  * Settings panel component
@@ -38,31 +24,58 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onTestConnection,
   isTestingConnection,
 }) => {
+  const apiService = new LLMApiService();
+
   // Find current provider based on endpoint
-  const getCurrentProvider = () => {
-    const provider = PROVIDER_OPTIONS.find(p => {
-      if (p.value === 'custom') return false;
-      return settings.apiEndpoint.includes(p.endpoint.replace('https://', '').replace('http://', '').split('/')[0]);
-    });
-    return provider || PROVIDER_OPTIONS.find(p => p.value === 'custom')!;
+  const getCurrentProvider = (providers: ProviderInfo[], endpoint: string): ProviderInfo | null => {
+    if (!endpoint) return null;
+    const cleanEndpoint = endpoint.replace('https://', '').replace('http://', '').split('/')[0];
+    return providers.find(p => p.apiEndpoint.includes(cleanEndpoint)) || null;
   };
 
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [localSettings, setLocalSettings] = useState<LLMSettings>(() => ({
     ...settings,
     apiKey: settings.apiKey || '',
   }));
-  const [currentProvider, setCurrentProvider] = useState(getCurrentProvider());
+  const [currentProvider, setCurrentProvider] = useState<ProviderInfo | null>(null);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
+  const isTestingRef = useRef(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
+
+  // Fetch providers from backend on mount
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const data = await apiService.getProviders();
+        setProviders(data.providers || []);
+      } catch (err) {
+        console.error('Failed to fetch providers:', err);
+        setProviders([]);
+      } finally {
+        setIsLoadingProviders(false);
+      }
+    };
+    fetchProviders();
+  }, []);
+
+  // Update current provider when providers or endpoint changes
+  useEffect(() => {
+    if (providers.length > 0 && localSettings.apiEndpoint) {
+      const provider = getCurrentProvider(providers, localSettings.apiEndpoint);
+      setCurrentProvider(provider);
+    }
+  }, [providers, localSettings.apiEndpoint]);
 
   // Update local settings when props change (preserve apiKey)
   useEffect(() => {
+    console.log('[SettingsPanel] Settings prop changed:', JSON.stringify(settings, null, 2));
     setLocalSettings((prev) => ({
       ...settings,
       apiKey: prev.apiKey, // Never overwrite user input
     }));
-    setCurrentProvider(getCurrentProvider());
   }, [settings]);
 
   // Check for changes
@@ -80,26 +93,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   }, []);
 
   // Handle provider change
-  const handleProviderChange = useCallback((providerValue: string) => {
-    const provider = PROVIDER_OPTIONS.find(p => p.value === providerValue)!;
-    setCurrentProvider(provider);
+  const handleProviderChange = useCallback((providerId: string) => {
+    const provider = providers.find(p => p.id === providerId);
+    if (!provider) return;
 
-    if (provider.value === 'custom') {
-      // Custom: keep current endpoint and model
-      setLocalSettings((prev) => ({
-        ...prev,
-        apiEndpoint: prev.apiEndpoint,
-        model: prev.model,
-      }));
-    } else {
-      // Predefined provider: auto-fill endpoint and default model
-      setLocalSettings((prev) => ({
-        ...prev,
-        apiEndpoint: provider.endpoint,
-        model: provider.defaultModel,
-      }));
-    }
-  }, []);
+    setCurrentProvider(provider);
+    // Only update endpoint and provider info, preserve user's model choice
+    setLocalSettings((prev) => ({
+      ...prev,
+      provider: provider.id,
+      providerName: provider.name,
+      apiEndpoint: provider.apiEndpoint,
+      // Preserve user's custom model (do not override with default)
+      model: prev.model,
+      // Auto-enable/disable features based on provider capabilities
+      enableStreaming: provider.enableStreaming ?? prev.enableStreaming,
+      enableVision: provider.enableVision ?? prev.enableVision,
+    }));
+  }, [providers]);
 
   // Handle model change
   const handleModelChange = useCallback((value: string) => {
@@ -112,12 +123,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       ...prev,
       apiEndpoint: value,
     }));
-    // If custom endpoint, mark as custom provider
-    const isKnownProvider = PROVIDER_OPTIONS.some(p => p.value !== 'custom' && value.includes(p.endpoint.replace('https://', '').replace('http://', '').split('/')[0]));
-    if (!isKnownProvider) {
-      setCurrentProvider(PROVIDER_OPTIONS.find(p => p.value === 'custom')!);
+    // If custom endpoint, clear current provider
+    if (providers.length > 0) {
+      const provider = getCurrentProvider(providers, value);
+      setCurrentProvider(provider);
     }
-  }, []);
+  }, [providers]);
 
   // Handle save
   const handleSave = useCallback(() => {
@@ -127,13 +138,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   // Handle test connection
   const handleTestConnection = useCallback(async () => {
+    if (isTestingRef.current) return;
+    isTestingRef.current = true;
     setTestResult(null);
     try {
-      // First save the current settings to ensure test uses latest values
-      await onSettingsChange(localSettings);
-      setHasChanges(false);
-
-      // Then test the connection
       const result = await onTestConnection();
       setTestResult(result);
     } catch (err) {
@@ -141,8 +149,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         success: false,
         error: err instanceof Error ? err.message : 'Connection test failed',
       });
+    } finally {
+      isTestingRef.current = false;
     }
-  }, [localSettings, onSettingsChange, onTestConnection]);
+  }, [onTestConnection]);
 
   // Check if API key is available
   const isApiKeyAvailable = localSettings.apiKey.trim().length > 0;
@@ -168,17 +178,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {/* Provider Selection */}
           <div className="llm-settings-field">
             <label htmlFor="provider">Select Provider</label>
-            <select
-              id="provider"
-              value={currentProvider.value}
-              onChange={(e) => handleProviderChange(e.target.value)}
-            >
-              {PROVIDER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            {isLoadingProviders ? (
+              <select id="provider" disabled>
+                <option value="">Loading providers...</option>
+              </select>
+            ) : (
+              <select
+                id="provider"
+                value={currentProvider?.id || ''}
+                onChange={(e) => handleProviderChange(e.target.value)}
+              >
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* API Endpoint */}
@@ -205,7 +221,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 type={showApiKey ? 'text' : 'password'}
                 value={localSettings.apiKey}
                 onChange={(e) => handleChange('apiKey', e.target.value)}
-                placeholder={currentProvider.value === 'ollama' ? 'any-value (Ollama local no auth)' : 'sk-...'}
+                placeholder={currentProvider?.id === 'ollama' ? 'any-value (Ollama local no auth)' : 'sk-...'}
                 className="llm-api-key-input"
               />
               <button
@@ -225,7 +241,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </button>
             </div>
             <p className="llm-settings-hint">
-              {currentProvider.value === 'ollama'
+              {currentProvider?.id === 'ollama'
                 ? 'Ollama 本地部署无需认证，填写任意值即可'
                 : 'Enter your API key'}
             </p>
@@ -242,7 +258,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               type="text"
               value={localSettings.model}
               onChange={(e) => handleModelChange(e.target.value)}
-              placeholder={currentProvider.defaultModel || 'e.g., gpt-4o, llama3, qwen-turbo'}
+              placeholder={currentProvider?.defaultModel || 'e.g., gpt-4o, llama3, qwen-turbo'}
             />
             <p className="llm-settings-hint">
               Enter the model name supported by your API provider

@@ -1,0 +1,555 @@
+/**
+ * Skill Panel Styles
+ */
+
+.llm-skill-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--jp-layout-color1);
+}
+
+.llm-skill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--jp-border-color1);
+}
+
+.llm-skill-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.llm-skill-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-skill-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.llm-skill-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-skill-empty .llm-hint {
+  font-size: 12px;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+.llm-install-sample-btn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  background: var(--jp-layout-color2);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  color: var(--jp-ui-font-color1);
+  cursor: pointer;
+}
+
+.llm-install-sample-btn:hover {
+  background: var(--jp-layout-color3);
+}
+
+.llm-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.llm-skill-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.llm-skill-item:hover {
+  background: var(--jp-layout-color2);
+  border-color: var(--jp-border-color1);
+}
+
+.llm-skill-disabled {
+  opacity: 0.6;
+}
+
+.llm-skill-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.llm-skill-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.llm-skill-version {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--jp-ui-font-color2);
+  background: var(--jp-layout-color3);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.llm-skill-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.llm-skill-description {
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-skill-author {
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+  opacity: 0.7;
+}
+
+.llm-skill-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-skill-toggle,
+.llm-skill-delete {
+  background: transparent;
+  border: none;
+  color: var(--jp-ui-font-color2);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.llm-skill-toggle:hover,
+.llm-skill-delete:hover {
+  opacity: 1;
+}
+
+.llm-skill-toggle.llm-enabled {
+  color: var(--jp-success-color0);
+}
+
+.llm-skill-toggle.llm-disabled {
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-skill-toggle:hover {
+  background: var(--jp-layout-color3);
+}
+
+.llm-skill-delete:hover {
+  background: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+}
+
+.llm-skill-error {
+  padding: 16px;
+  text-align: center;
+  color: var(--jp-error-color0);
+}
+
+.llm-skill-error button {
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  cursor: pointer;
+}
+
+/* Install Form */
+.llm-skill-install-form {
+  padding: 12px;
+  border-bottom: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color2);
+}
+
+.llm-skill-install-form h5 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.llm-skill-install-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: var(--jp-layout-color1);
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.llm-skill-install-toggle button {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--jp-ui-font-color2);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.llm-skill-install-toggle button:hover {
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-skill-install-toggle button.active {
+  background: var(--jp-layout-color3);
+  color: var(--jp-ui-font-color1);
+  font-weight: 500;
+}
+
+.llm-skill-install-field {
+  margin-bottom: 12px;
+}
+
+.llm-skill-install-field label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-skill-install-field input,
+.llm-skill-install-field textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+
+.llm-skill-install-field textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.llm-skill-install-error {
+  padding: 8px;
+  margin-bottom: 8px;
+  background: var(--jp-error-color0);
+  color: var(--jp-ui-inverse-font-color0);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.llm-skill-install-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Skill Detail */
+.llm-skill-detail {
+  padding: 12px;
+  border-top: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color2);
+}
+
+.llm-skill-detail h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.llm-skill-detail-desc {
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+  margin: 0 0 12px 0;
+}
+
+.llm-skill-detail-prompt {
+  margin-bottom: 12px;
+}
+
+.llm-skill-detail-prompt label {
+  display: block;
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+  margin-bottom: 4px;
+}
+
+.llm-skill-prompt-preview {
+  padding: 8px;
+  background: var(--jp-layout-color1);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.llm-skill-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.llm-edit-prompt-btn {
+  padding: 6px 12px;
+  background: var(--jp-layout-color3);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.llm-edit-prompt-btn:hover {
+  background: var(--jp-layout-color2);
+}
+
+/* Edit Prompt Form */
+.llm-skill-edit-prompt {
+  padding: 12px;
+  border-top: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color2);
+}
+
+.llm-skill-edit-prompt h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.llm-skill-edit-prompt textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+  min-height: 120px;
+  box-sizing: border-box;
+}
+
+.llm-skill-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Marketplace */
+.llm-skill-marketplace {
+  padding: 12px;
+  border-bottom: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color2);
+}
+
+.llm-marketplace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.llm-marketplace-header h5 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.llm-marketplace-close {
+  background: transparent;
+  border: none;
+  color: var(--jp-ui-font-color2);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.llm-marketplace-close:hover {
+  background: var(--jp-layout-color3);
+}
+
+.llm-marketplace-hint {
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+  margin: 0 0 12px 0;
+}
+
+.llm-marketplace-registries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.llm-registry-item {
+  padding: 10px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.llm-registry-item:hover {
+  background: var(--jp-layout-color3);
+  border-color: var(--jp-border-color2);
+}
+
+.llm-registry-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.llm-registry-desc {
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-marketplace-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--jp-ui-font-color2);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 12px;
+}
+
+.llm-marketplace-back:hover {
+  color: var(--jp-ui-font-color1);
+}
+
+.llm-marketplace-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.llm-marketplace-empty {
+  text-align: center;
+  color: var(--jp-ui-font-color2);
+  font-size: 12px;
+  padding: 16px;
+}
+
+.llm-marketplace-skill-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  gap: 12px;
+}
+
+.llm-marketplace-skill-item:hover {
+  border-color: var(--jp-border-color2);
+}
+
+.llm-marketplace-skill-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.llm-marketplace-skill-name {
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.llm-marketplace-skill-desc {
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+  margin-bottom: 4px;
+}
+
+.llm-marketplace-skill-author {
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+  opacity: 0.7;
+}
+
+.llm-marketplace-skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.llm-marketplace-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--jp-layout-color3);
+  border-radius: 3px;
+  color: var(--jp-ui-font-color2);
+}
+
+.llm-marketplace-install-btn {
+  padding: 6px 12px;
+  background: var(--jp-layout-color3);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.llm-marketplace-install-btn:hover {
+  background: var(--jp-layout-color2);
+  border-color: var(--jp-border-color2);
+}
+
+.llm-marketplace-install-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Header button active state */
+.llm-header-btn.active {
+  background: var(--jp-layout-color3);
+  color: var(--jp-ui-font-color1);
+}
