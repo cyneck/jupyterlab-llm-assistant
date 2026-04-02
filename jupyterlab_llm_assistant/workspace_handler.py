@@ -242,59 +242,59 @@ class AssistantMdHandler(APIHandler):
 
 class WorkspaceConfigHandler(APIHandler):
     """
-    GET  /llm-assistant/workspace/config  → user-level config from ~/.llm-assistant/config.json
-    PUT  /llm-assistant/workspace/config  ← partial update
+    GET  /llm-assistant/workspace/config  → project-level config from .llm-assistant/config.json
+    PUT  /llm-assistant/workspace/config  ← partial update to project-level config
 
-    Note: Config is stored at user level (~/.llm-assistant/config.json) instead of
-    project level to avoid accidentally committing sensitive values (API keys) to git.
+    Note: This is for PROJECT-LEVEL overrides only (stored in .llm-assistant/config.json).
+    User-level config (API keys, etc.) is managed by ConfigHandler at ~/.llm-assistant/config.json.
+    Project-level config can override: model, temperature, maxTokens, systemPrompt (but NOT apiKey)
     """
-
-    ALLOWED_KEYS = {"model", "temperature", "maxTokens", "systemPrompt", "apiEndpoint"}
-
-    def initialize(self, config_store: Dict[str, Any]):
-        self.config_store = config_store
 
     @web.authenticated
     async def get(self):
-        # Always read from user-level config
+        """Get project-level config overrides from .llm-assistant/config.json"""
+        root_dir = self.get_argument("rootDir", "")
+        ws = _workspace_dir(root_dir)
+        project_config_file = ws / "config.json"
+
         cfg: Dict[str, Any] = {}
-        if USER_CONFIG_FILE.exists():
+        if project_config_file.exists():
             try:
-                cfg = json.loads(USER_CONFIG_FILE.read_text(encoding="utf-8"))
+                cfg = json.loads(project_config_file.read_text(encoding="utf-8"))
+                # Remove sensitive keys if present
+                cfg.pop("apiKey", None)
             except Exception:
                 cfg = {}
 
-        self.finish(json.dumps({"config": cfg, "path": str(USER_CONFIG_FILE)}))
+        self.finish(json.dumps({"config": cfg, "path": str(project_config_file)}))
 
     @web.authenticated
     async def put(self):
+        """Update project-level config overrides."""
         try:
             body = json.loads(self.request.body.decode("utf-8"))
         except json.JSONDecodeError:
             raise web.HTTPError(400, "Invalid JSON")
 
-        # Ensure user config directory exists
-        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        root_dir = body.get("rootDir", "")
+        ws = _workspace_dir(root_dir)
+        _ensure_dirs(ws)
+        project_config_file = ws / "config.json"
 
-        # Load existing user-level config
+        # Load existing project-level config
         existing: Dict[str, Any] = {}
-        if USER_CONFIG_FILE.exists():
+        if project_config_file.exists():
             try:
-                existing = json.loads(USER_CONFIG_FILE.read_text(encoding="utf-8"))
+                existing = json.loads(project_config_file.read_text(encoding="utf-8"))
             except Exception:
                 pass
 
-        # Merge allowed keys
-        for key in self.ALLOWED_KEYS:
-            if key in body:
+        # Merge request body (skip internal keys and sensitive keys)
+        for key in list(body.keys()):
+            if not key.startswith("_") and key != "apiKey":
                 existing[key] = body[key]
 
-        USER_CONFIG_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-
-        # Sync to in-memory config_store and persist (keeps config.json and config_store in sync)
-        for key in self.ALLOWED_KEYS:
-            if key in existing:
-                self.config_store[key] = existing[key]
+        project_config_file.write_text(json.dumps(existing, indent=2), encoding="utf-8")
 
         self.finish(json.dumps({"ok": True, "config": existing}))
 

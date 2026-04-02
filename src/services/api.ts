@@ -67,17 +67,13 @@ export class LLMApiService {
   }
 
   /**
-   * Set configuration - sends complete config by merging with current
+   * Set configuration - sends partial settings directly (backend merges with current)
    */
   async setConfig(settings: Partial<LLMSettings>): Promise<void> {
-    // Get current config first to merge
-    const current = await this.getConfig();
-    // Merge partial settings with current config
-    const merged = { ...current, ...settings };
     const response = await fetch(`${this.baseUrl}/config`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify(merged),
+      body: JSON.stringify(settings),
     });
 
     if (!response.ok) {
@@ -470,16 +466,6 @@ export class LLMApiService {
     });
     if (!r.ok) throw new Error(`Failed to get workspace config: ${r.statusText}`);
     return r.json();
-  }
-
-  /** Save workspace config (per-project settings in .llm-assistant/config.json) */
-  async setWorkspaceConfig(config: Record<string, any>, rootDir = ''): Promise<void> {
-    const r = await fetch(`${this.baseUrl}/workspace/config`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify({ ...config, rootDir }),
-    });
-    if (!r.ok) throw new Error(`Failed to set workspace config: ${r.statusText}`);
   }
 
   /** List saved sessions */

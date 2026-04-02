@@ -10,7 +10,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { LLMSettings, ImageData, ConnectionTestResult, UnifiedMessage, MessageMode, MessageToolCall } from '../models/types';
-import { SettingsModel } from '../models/settings';
 import { InputArea, AttachedPath } from './InputArea';
 import { SettingsPanel } from './SettingsPanel';
 import { MemoryPanel } from './MemoryPanel';
@@ -22,6 +21,7 @@ import { LLMApiService } from '../services/api';
 export interface ChatPanelProps {
   settings: LLMSettings;
   onOpenSettings: () => void;
+  onSettingsChange?: (settings: Partial<LLMSettings>) => Promise<void>;
 }
 
 // Session storage - using backend .llm-assistant/sessions/ directory
@@ -111,7 +111,7 @@ function uid(): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings, onSettingsChange }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [showSession, setShowSession] = useState(false);
@@ -119,6 +119,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   const [currentSettings, setCurrentSettings] = useState<LLMSettings>(settings);
   const [sendMode, setSendMode] = useState<MessageMode>('agent');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [rootDir, setRootDir] = useState('');
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
@@ -127,28 +128,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const settingsModelRef = useRef<SettingsModel | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const rootDirRef = useRef<string>('');
 
   // ── Initialize ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!settingsModelRef.current) {
-      settingsModelRef.current = new SettingsModel(currentSettings);
-      settingsModelRef.current.loadSettings().then((loaded) => {
-        setCurrentSettings(loaded);
-      });
-    }
-
     // Load workspace and session
     _api.getWorkspaceInfo('').then(info => {
       const dir = info.rootDir || '';
       setRootDir(dir);
       rootDirRef.current = dir;
-      // Set rootDir for workspace config
-      if (settingsModelRef.current) {
-        settingsModelRef.current.setRootDir(dir);
-      }
       // Load session from backend
       return loadSessionFromBackend(dir);
     }).then(sessionData => {
@@ -162,6 +151,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
       setIsLoadingSession(false);
     });
   }, []);
+
+  // Sync external settings prop with local currentSettings state
+  // This ensures settings loaded from server are reflected in the UI
+  useEffect(() => {
+    console.log('[ChatPanel] settings prop changed:', JSON.stringify(settings, null, 2));
+    setCurrentSettings(prev => {
+      const merged = { ...prev, ...settings };
+      console.log('[ChatPanel] currentSettings updated:', JSON.stringify(merged, null, 2));
+      return merged;
+    });
+  }, [settings]);
 
   // Persist messages to backend when changed
   useEffect(() => {
@@ -495,25 +495,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings }
 
   // ── Settings handlers ──────────────────────────────────────────────────────
   const handleSettingsChange = useCallback(async (newSettings: Partial<LLMSettings>) => {
-    if (!settingsModelRef.current) return;
+    if (isSaving || !onSettingsChange) return;
+    setIsSaving(true);
     try {
-      await settingsModelRef.current.saveSettings(newSettings);
+      await onSettingsChange(newSettings);
       setCurrentSettings(prev => ({ ...prev, ...newSettings }));
     } catch (err) {
       console.error('Failed to save settings:', err);
+    } finally {
+      setIsSaving(false);
     }
-  }, []);
+  }, [isSaving, onSettingsChange]);
 
   const handleTestConnection = useCallback(async (): Promise<ConnectionTestResult> => {
-    if (!settingsModelRef.current) return { success: false, error: 'Not initialized' };
     setIsTestingConnection(true);
     try {
-      await settingsModelRef.current.saveSettings(currentSettings);
-      return await settingsModelRef.current.testConnection();
+      return await _api.testConnection();
     } finally {
       setIsTestingConnection(false);
     }
-  }, [currentSettings]);
+  }, []);
 
   const hasApiKey = currentSettings.hasApiKey ||
     (currentSettings.apiKey && currentSettings.apiKey.length > 0);

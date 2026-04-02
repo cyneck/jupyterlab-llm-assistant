@@ -50,11 +50,11 @@ def _configure_logging():
     # Configure root logger for the extension
     root_logger = logging.getLogger("jupyterlab_llm_assistant")
     root_logger.setLevel(level)
-    root_logger.addHandler(handler)
+    # Only add handler if not already added to avoid duplicates on reload
+    if not root_logger.handlers:
+        root_logger.addHandler(handler)
 
-    # Propagate to child loggers
-    logging.getLogger("jupyterlab_llm_assistant.handlers").addHandler(handler)
-    logging.getLogger("jupyterlab_llm_assistant.handlers").setLevel(level)
+    # Child loggers inherit from root via propagate, no need to add separate handlers
 
     root_logger.info(f"Logging configured at level {logging.getLevelName(level)}")
 
@@ -104,8 +104,8 @@ def get_provider_defaults(provider_id: Optional[str] = None) -> Dict[str, Any]:
         "providerName": provider.get("name", ""),
         "apiEndpoint": provider.get("apiEndpoint", ""),
         "model": provider.get("defaultModel", ""),
-        "supportsStreaming": provider.get("supportsStreaming", True),
-        "supportsVision": provider.get("supportsVision", False),
+        "enableStreaming": provider.get("enableStreaming", True),
+        "enableVision": provider.get("enableVision", False),
     }
 
 
@@ -125,7 +125,7 @@ def _load_config() -> Dict[str, Any]:
                 saved = json.load(f)
             if isinstance(saved, dict):
                 config = saved
-            logger.info(f"[_load_config] Loaded config with keys: {list(config.keys())}")
+            logger.info(f"[_load_config] Loaded config with keys: {list(config.keys())}, provider={config.get('provider')}, model={config.get('model')}")
         else:
             logger.info("[_load_config] No config file found, using empty dict")
     except Exception as e:
@@ -155,10 +155,13 @@ def _save_config(config: Dict[str, Any]) -> None:
     to ensure config.json and _config_store are always in sync.
     """
     try:
+        # CRITICAL: config may be _config_store itself, so copy data first
+        config_data = dict(config)
+
         os.makedirs(os.path.dirname(_CONFIG_FILE), exist_ok=True)
 
         # Filter out internal keys (starting with underscore)
-        to_save = {k: v for k, v in config.items() if not k.startswith('_')}
+        to_save = {k: v for k, v in config_data.items() if not k.startswith('_')}
 
         with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(to_save, f, indent=2, ensure_ascii=False)
@@ -166,10 +169,11 @@ def _save_config(config: Dict[str, Any]) -> None:
         # Update global config store in-place
         global _config_store
         _config_store.clear()
-        _config_store.update(config)
+        _config_store.update(config_data)
+        _config_store["_save_callback"] = _save_config
         logger.info(f"[_save_config] Config saved, keys: {list(to_save.keys())}")
-    except Exception:
-        pass  # Non-fatal — just skip persistence
+    except Exception as e:
+        logger.error(f"[_save_config] Failed to save config: {e}")
 
 
 # ─── Global config store ──────────────────────────────────────────────────────

@@ -119,8 +119,8 @@ export interface ProviderInfo {
   name: string;
   apiEndpoint: string;
   defaultModel: string;
-  supportsStreaming: boolean;
-  supportsVision: boolean;
+  enableStreaming: boolean;
+  enableVision: boolean;
 }
 
 /**

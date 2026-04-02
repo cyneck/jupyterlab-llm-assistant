@@ -2,7 +2,7 @@
  * Settings panel component.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { LLMSettings, ConnectionTestResult, ProviderInfo } from '../models/types';
 import { LLMApiService } from '../services/api';
 
@@ -40,6 +40,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   }));
   const [currentProvider, setCurrentProvider] = useState<ProviderInfo | null>(null);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
+  const isTestingRef = useRef(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isLoadingProviders, setIsLoadingProviders] = useState(true);
@@ -70,15 +71,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   // Update local settings when props change (preserve apiKey)
   useEffect(() => {
+    console.log('[SettingsPanel] Settings prop changed:', JSON.stringify(settings, null, 2));
     setLocalSettings((prev) => ({
       ...settings,
       apiKey: prev.apiKey, // Never overwrite user input
     }));
-    if (providers.length > 0) {
-      const provider = getCurrentProvider(providers, settings.apiEndpoint);
-      setCurrentProvider(provider);
-    }
-  }, [settings, providers]);
+  }, [settings]);
 
   // Check for changes
   useEffect(() => {
@@ -100,16 +98,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     if (!provider) return;
 
     setCurrentProvider(provider);
-    // Predefined provider: auto-fill endpoint and default model
+    // Only update endpoint and provider info, preserve user's model choice
     setLocalSettings((prev) => ({
       ...prev,
       provider: provider.id,
       providerName: provider.name,
       apiEndpoint: provider.apiEndpoint,
-      model: provider.defaultModel,
+      // Preserve user's custom model (do not override with default)
+      model: prev.model,
       // Auto-enable/disable features based on provider capabilities
-      enableStreaming: provider.supportsStreaming ?? prev.enableStreaming,
-      enableVision: provider.supportsVision ?? prev.enableVision,
+      enableStreaming: provider.enableStreaming ?? prev.enableStreaming,
+      enableVision: provider.enableVision ?? prev.enableVision,
     }));
   }, [providers]);
 
@@ -139,13 +138,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   // Handle test connection
   const handleTestConnection = useCallback(async () => {
+    if (isTestingRef.current) return;
+    isTestingRef.current = true;
     setTestResult(null);
     try {
-      // First save the current settings to ensure test uses latest values
-      await onSettingsChange(localSettings);
-      setHasChanges(false);
-
-      // Then test the connection
       const result = await onTestConnection();
       setTestResult(result);
     } catch (err) {
@@ -153,8 +149,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         success: false,
         error: err instanceof Error ? err.message : 'Connection test failed',
       });
+    } finally {
+      isTestingRef.current = false;
     }
-  }, [localSettings, onSettingsChange, onTestConnection]);
+  }, [onTestConnection]);
 
   // Check if API key is available
   const isApiKeyAvailable = localSettings.apiKey.trim().length > 0;

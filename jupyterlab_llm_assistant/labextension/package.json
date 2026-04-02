@@ -94,7 +94,7 @@
       "@jupyterlab/ui-components"
     ],
     "_build": {
-      "load": "static/remoteEntry.da0ed5bb5aee9babb779.js",
+      "load": "static/remoteEntry.3f54eb93a2124a79ad23.js",
       "extension": "./extension",
       "style": "./style"
     }

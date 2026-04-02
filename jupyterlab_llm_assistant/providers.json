@@ -4,113 +4,113 @@
       "name": "OpenAI",
       "apiEndpoint": "https://api.openai.com/v1",
       "defaultModel": "gpt-4o",
-      "supportsStreaming": true,
-      "supportsVision": true
+      "enableStreaming": true,
+      "enableVision": true
     },
     "anthropic": {
       "name": "Anthropic (Claude)",
       "apiEndpoint": "https://api.anthropic.com/v1",
       "defaultModel": "claude-3-5-sonnet-20241022",
-      "supportsStreaming": true,
-      "supportsVision": true
+      "enableStreaming": true,
+      "enableVision": true
     },
     "google": {
       "name": "Google (Gemini)",
       "apiEndpoint": "https://generativelanguage.googleapis.com/v1beta",
       "defaultModel": "gemini-3.0-flash",
-      "supportsStreaming": true,
-      "supportsVision": true
+      "enableStreaming": true,
+      "enableVision": true
     },
     "groq": {
       "name": "Groq",
       "apiEndpoint": "https://api.groq.com/openai/v1",
       "defaultModel": "llama-3.3-70b-versatile",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "mistral": {
       "name": "Mistral AI",
       "apiEndpoint": "https://api.mistral.ai/v1",
       "defaultModel": "mistral-large-latest",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "cohere": {
       "name": "Cohere",
       "apiEndpoint": "https://api.cohere.ai/v2",
       "defaultModel": "command-r-plus",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "deepinfra": {
       "name": "DeepInfra",
       "apiEndpoint": "https://api.deepinfra.com/v1/openai",
       "defaultModel": "meta-llama/Llama-3.3-70B-Instruct",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "together": {
       "name": "Together AI",
       "apiEndpoint": "https://api.together.xyz/v1",
       "defaultModel": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "qwen": {
       "name": "阿里云通义 (DashScope)",
       "apiEndpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
       "defaultModel": "qwen-plus",
-      "supportsStreaming": true,
-      "supportsVision": true
+      "enableStreaming": true,
+      "enableVision": true
     },
     "qwen-code": {
       "name": "阿里云Coding Plan (DashScope)",
       "apiEndpoint": "https://coding.dashscope.aliyuncs.com/v1",
       "defaultModel": "qwen2.5-coder-32b-instruct",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "zhipu": {
       "name": "智谱 GLM",
       "apiEndpoint": "https://open.bigmodel.cn/api/paas/v4",
       "defaultModel": "glm-4",
-      "supportsStreaming": true,
-      "supportsVision": true
+      "enableStreaming": true,
+      "enableVision": true
     },
     "deepseek": {
       "name": "DeepSeek",
       "apiEndpoint": "https://api.deepseek.com/v1",
       "defaultModel": "deepseek-chat",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "minimax": {
       "name": "MiniMax",
       "apiEndpoint": "https://api.minimax.chat/v1",
       "defaultModel": "MiniMax-M2.5",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "kimi": {
       "name": "Kimi (Moonshot)",
       "apiEndpoint": "https://api.moonshot.cn/v1",
       "defaultModel": "kimi-k2.5",
-      "supportsStreaming": true,
-      "supportsVision": true
+      "enableStreaming": true,
+      "enableVision": true
     },
     "ollama": {
       "name": "Ollama (本地)",
       "apiEndpoint": "http://localhost:11434/v1",
       "defaultModel": "qwen3.5",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     },
     "custom": {
       "name": "自定义 API",
       "apiEndpoint": "",
       "defaultModel": "",
-      "supportsStreaming": true,
-      "supportsVision": false
+      "enableStreaming": true,
+      "enableVision": false
     }
   },
   "defaultProvider": "openai"

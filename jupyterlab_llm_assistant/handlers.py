@@ -8,6 +8,7 @@ import json
 import os
 import asyncio
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 from tornado import web
 from jupyter_server.base.handlers import APIHandler
@@ -76,14 +77,17 @@ class ConfigHandler(BaseConfigHandler):
     """
     Handler for configuration management.
 
-    GET: Retrieve current configuration
+    GET: Retrieve current configuration (always synced with disk)
     POST: Update configuration
     """
 
     @web.authenticated
     async def get(self):
-        """Get current configuration (excluding sensitive data)."""
-        logger.info("[ConfigHandler] GET /llm-assistant/config")
+        """Get current configuration (excluding sensitive data), synced with disk."""
+        # Always reload from disk to ensure consistency
+        from .serverextension import _reload_config
+        _reload_config()
+        logger.info("[ConfigHandler] GET /llm-assistant/config (synced with disk)")
         self.finish(json.dumps(self._build_safe_config()))
 
     @web.authenticated
@@ -100,39 +104,10 @@ class ConfigHandler(BaseConfigHandler):
         debug_data = {k: (v if k != "apiKey" else "***") for k, v in data.items()}
         logger.debug(f"[ConfigHandler] request_body: {json.dumps(debug_data, ensure_ascii=False)[:500]}")
 
-        # Check if provider changed - if so, reload provider defaults
-        provider_changed = "provider" in data and data["provider"] != self.config_store.get("provider")
-        if provider_changed:
-            logger.info(f"[ConfigHandler] Provider changed to {data['provider']}, reloading provider defaults")
-            # Get fresh provider defaults
-            from .serverextension import get_provider_defaults
-            provider_defaults = get_provider_defaults(data["provider"])
-            # Update config_store with new provider defaults
-            for key, value in provider_defaults.items():
-                if key not in ["models"]:  # Don't override user's model choice
-                    self.config_store[key] = value
-            self.config_store["provider"] = data["provider"]
-
-        # Update config store with new values from frontend
-        # These override provider defaults (user's choices)
-        allowed_keys = [
-            "provider", "apiEndpoint", "model", "temperature", "maxTokens",
-            "systemPrompt", "enableStreaming", "enableVision"
-        ]
-
-        updated_keys = []
-        for key in allowed_keys:
-            if key in data:
+        # Merge entire request body into config_store (skip internal keys)
+        for key in list(data.keys()):
+            if not key.startswith('_'):
                 self.config_store[key] = data[key]
-                updated_keys.append(key)
-
-        # Handle API key - always save to config.json
-        if "apiKey" in data:
-            self.config_store["apiKey"] = data["apiKey"]
-            updated_keys.append("apiKey")
-
-        logger.info(f"[ConfigHandler] Updated config keys: {updated_keys}")
-        logger.info(f"[ConfigHandler] Final config: provider={self.config_store.get('provider')}, model={self.config_store.get('model')}, apiEndpoint={self.config_store.get('apiEndpoint')}")
 
         # Persist configuration to disk
         save_cb = self.config_store.get("_save_callback")
@@ -140,8 +115,50 @@ class ConfigHandler(BaseConfigHandler):
             save_cb(self.config_store)
             logger.info("[ConfigHandler] Config persisted to disk")
 
-        # Fix: do NOT call await self.get() — build response directly
         self.finish(json.dumps(self._build_safe_config()))
+
+
+class ConfigPreviewHandler(BaseConfigHandler):
+    """
+    Handler for previewing the raw config file content.
+
+    GET /llm-assistant/config/preview
+    → { path: string, content: object, exists: boolean }
+
+    Returns the actual config file content with apiKey masked for verification.
+    """
+
+    @web.authenticated
+    async def get(self):
+        """Get raw config file content for preview."""
+        import os
+        from .serverextension import _CONFIG_FILE
+
+        logger.info("[ConfigPreviewHandler] GET /llm-assistant/config/preview")
+
+        config_file = Path(_CONFIG_FILE)
+        result = {
+            "path": str(config_file),
+            "exists": config_file.exists(),
+            "content": None,
+        }
+
+        if config_file.exists():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    content = json.load(f)
+                # Mask sensitive fields
+                if "apiKey" in content:
+                    content["apiKey"] = "***" if content["apiKey"] else ""
+                result["content"] = content
+                logger.info(f"[ConfigPreviewHandler] Loaded config from {config_file}")
+            except Exception as e:
+                logger.error(f"[ConfigPreviewHandler] Failed to load config: {e}")
+                result["error"] = str(e)
+        else:
+            logger.info(f"[ConfigPreviewHandler] Config file not found at {config_file}")
+
+        self.finish(json.dumps(result))
 
 
 class ConfigReloadHandler(BaseConfigHandler):
@@ -319,8 +336,8 @@ class ProvidersHandler(BaseConfigHandler):
                 "name": pdata.get("name", ""),
                 "apiEndpoint": pdata.get("apiEndpoint", ""),
                 "defaultModel": pdata.get("defaultModel", ""),
-                "supportsStreaming": pdata.get("supportsStreaming", True),
-                "supportsVision": pdata.get("supportsVision", False),
+                "enableStreaming": pdata.get("enableStreaming", True),
+                "enableVision": pdata.get("enableVision", False),
             })
 
         logger.info(f"[ProvidersHandler] Returning {len(provider_list)} providers")
@@ -462,7 +479,7 @@ def setup_handlers(web_app, config_store: Dict[str, Any]):
     routes += [
         (url_path_join(base_url, "/llm-assistant/workspace/info"), WorkspaceInfoHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/assistant-md"), AssistantMdHandler),
-        (url_path_join(base_url, "/llm-assistant/workspace/config"), WorkspaceConfigHandler, {"config_store": config_store}),
+        (url_path_join(base_url, "/llm-assistant/workspace/config"), WorkspaceConfigHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/sessions"), SessionListHandler),
         (url_path_join(base_url, r"/llm-assistant/workspace/sessions/([^/]+)"), SessionItemHandler),
         (url_path_join(base_url, "/llm-assistant/workspace/skills"), SkillListHandler),
