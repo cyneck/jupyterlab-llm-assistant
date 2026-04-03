@@ -6,7 +6,7 @@
  * - agent: Text with inline tool call visualization + iteration indicator
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { UnifiedMessage, MessageToolCall } from '../models/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolCallDisplay } from './ToolCallDisplay';
@@ -53,6 +53,9 @@ interface AgentMessageContentProps {
 }
 
 const AgentMessageContent: React.FC<AgentMessageContentProps> = ({ message }) => {
+  const [showToolCalls, setShowToolCalls] = useState(false);
+  const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
+
   return (
     <div className="llm-message-agent-content">
       {/* Main text content */}
@@ -62,8 +65,31 @@ const AgentMessageContent: React.FC<AgentMessageContentProps> = ({ message }) =>
         </div>
       )}
 
-      {/* Tool calls */}
-      {message.toolCalls && message.toolCalls.length > 0 && (
+      {/* Iteration indicator with toggle for tool calls */}
+      {message.iteration && (
+        <div className="llm-message-iteration">
+          <button
+            className={`llm-iteration-badge ${message.isStreaming ? 'llm-iteration-active' : 'llm-iteration-complete'}`}
+            onClick={() => hasToolCalls && setShowToolCalls(v => !v)}
+            disabled={!hasToolCalls}
+            title={hasToolCalls ? (showToolCalls ? '点击折叠工具调用' : '点击展开工具调用') : undefined}
+          >
+            {message.isStreaming ? (
+              <>Thinking... ({message.iteration.current}/{message.iteration.max})</>
+            ) : (
+              <>Completed in {message.iteration.current} iterations</>
+            )}
+            {hasToolCalls && (
+              <span className="llm-iteration-chevron">
+                {showToolCalls ? '▲' : '▼'}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Tool calls - collapsible */}
+      {hasToolCalls && showToolCalls && message.toolCalls && (
         <div className="llm-message-tool-calls">
           {message.toolCalls.map((toolCall) => (
             <ToolCallDisplay
@@ -84,19 +110,6 @@ const AgentMessageContent: React.FC<AgentMessageContentProps> = ({ message }) =>
               }}
             />
           ))}
-        </div>
-      )}
-
-      {/* Iteration indicator */}
-      {message.iteration && (
-        <div className="llm-message-iteration">
-          <span className={`llm-iteration-badge ${message.isStreaming ? 'llm-iteration-active' : 'llm-iteration-complete'}`}>
-            {message.isStreaming ? (
-              <>Thinking... ({message.iteration.current}/{message.iteration.max})</>
-            ) : (
-              <>Completed in {message.iteration.current} iterations</>
-            )}
-          </span>
         </div>
       )}
     </div>

@@ -522,6 +522,22 @@ body[data-jp-theme-light='false'] .agent-user-bubble {
   background: var(--jp-layout-color3);
 }
 
+/* Collapsed tool call summary */
+.agent-tool-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-tool-expand-hint {
+  font-size: 9px;
+  color: var(--jp-content-font-color2);
+  opacity: 0.7;
+  margin-left: auto;
+}
+
 /* Status dot */
 .agent-tool-status {
   width: 7px;

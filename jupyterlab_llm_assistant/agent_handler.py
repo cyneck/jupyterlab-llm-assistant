@@ -131,7 +131,7 @@ class AgentHandler(APIHandler):
             raise web.HTTPError(400, "Invalid JSON")
 
         messages = body.get("messages", [])
-        max_iterations = min(body.get("maxIterations", 20), 30)
+        max_iterations = min(body.get("maxIterations", 50), 60)
         root_dir = body.get("rootDir") or os.getcwd()
 
         if not messages:

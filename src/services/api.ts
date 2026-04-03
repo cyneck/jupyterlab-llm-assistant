@@ -270,7 +270,7 @@ export class LLMApiService {
       body: JSON.stringify({
         messages,
         rootDir,
-        maxIterations: maxIterations ?? 20,
+        maxIterations: maxIterations ?? 50,
         ...settings && {
           model: settings.model,
           temperature: settings.temperature,

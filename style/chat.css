@@ -1252,6 +1252,69 @@ body[data-jp-theme-light='false'] .llm-mention-item.active {
 }
 
 /* ==============================================================================
+   Think Block - Collapsible thinking content
+   ============================================================================== */
+
+.llm-think-block {
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--jp-layout-color2);
+  border: 1px solid var(--jp-border-color1);
+}
+
+.llm-think-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--jp-layout-color3);
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--jp-ui-font-color2);
+  transition: background-color 0.15s;
+}
+
+.llm-think-header:hover {
+  background-color: var(--jp-layout-color2);
+}
+
+.llm-think-icon {
+  display: flex;
+  align-items: center;
+  color: var(--jp-brand-color1);
+}
+
+.llm-think-label {
+  flex: 1;
+  font-weight: 500;
+  text-align: left;
+}
+
+.llm-think-chevron {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.llm-think-content {
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--jp-ui-font-color2);
+  border-top: 1px solid var(--jp-border-color1);
+}
+
+.llm-think-content p {
+  margin: 0 0 8px 0;
+}
+
+.llm-think-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* ==============================================================================
    Code Block
    ============================================================================== */
 
@@ -1775,6 +1838,28 @@ body[data-jp-theme-light='false'] .llm-iteration-badge {
   border-radius: 50%;
   background: #22c55e;
   animation: none;
+}
+
+/* Iteration badge as a button */
+.llm-iteration-badge {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s, transform 0.1s;
+}
+
+.llm-iteration-badge:hover:not(:disabled) {
+  background: var(--jp-brand-color2, #90caf9);
+}
+
+.llm-iteration-badge:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.llm-iteration-chevron {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 .llm-model-indicator {

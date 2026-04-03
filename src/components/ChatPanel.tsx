@@ -406,7 +406,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings, 
         },
         rootDir || undefined,
         currentSettings,
-        20,
+        50,
         controller.signal,
       );
     } catch (err) {

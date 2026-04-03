@@ -121,7 +121,10 @@ function ArgsSummary({ name, args }: { name: string; args: Record<string, any> }
 }
 
 export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({ entry }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => {
+    // Auto-expand on error, otherwise collapse by default
+    return entry.result ? !entry.result.success : false;
+  });
   const duration = entry.endTime
     ? ((entry.endTime - entry.startTime) / 1000).toFixed(1)
     : null;

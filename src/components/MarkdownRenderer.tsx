@@ -116,6 +116,97 @@ const Td: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 /**
+ * Think block component - collapsible thinking content
+ */
+const ThinkBlock: React.FC<{ content: string }> = ({ content }) => {
+  const [expanded, setExpanded] = React.useState(false);
+
+  return (
+    <div className="llm-think-block">
+      <button
+        className="llm-think-header"
+        onClick={() => setExpanded(v => !v)}
+      >
+        <span className="llm-think-icon">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M9 21c0 .5.4 1 1 1h4c.6 0 1-.5 1-1v-1H9v1zm3-19C8.1 2 5 5.1 5 9c0 2.4 1.2 4.5 3 5.7V17c0 .5.4 1 1 1h6c.6 0 1-.5 1-1v-2.3c1.8-1.3 3-3.4 3-5.7 0-3.9-3.1-7-7-7z"/>
+          </svg>
+        </span>
+        <span className="llm-think-label">思考过程</span>
+        <span className="llm-think-chevron">{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div className="llm-think-content">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+            p: Paragraph as Components['p'],
+            a: Link as Components['a'],
+            code: Code as Components['code'],
+            pre: Pre as Components['pre'],
+            ul: Ul as Components['ul'],
+            ol: Ol as Components['ol'],
+            li: Li as Components['li'],
+            h1: ((props: any) => <Heading level={1} {...props} />) as Components['h1'],
+            h2: ((props: any) => <Heading level={2} {...props} />) as Components['h2'],
+            h3: ((props: any) => <Heading level={3} {...props} />) as Components['h3'],
+            blockquote: Blockquote as Components['blockquote'],
+          }}>
+            {content}
+          </ReactMarkdown>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Preprocess content to handle <think> tags
+ */
+function preprocessThinkTags(content: string): Array<{ type: 'markdown' | 'think'; content: string }> {
+  const result: Array<{ type: 'markdown' | 'think'; content: string }> = [];
+  let remaining = content;
+
+  while (remaining.length > 0) {
+    const thinkStart = remaining.indexOf('<think>');
+    if (thinkStart === -1) {
+      // No more <think> tags
+      if (remaining.trim()) {
+        result.push({ type: 'markdown', content: remaining });
+      }
+      break;
+    }
+
+    // Add content before <think>
+    if (thinkStart > 0) {
+      const before = remaining.slice(0, thinkStart);
+      if (before.trim()) {
+        result.push({ type: 'markdown', content: before });
+      }
+    }
+
+    // Find closing </think>
+    const thinkEnd = remaining.indexOf('</think>', thinkStart);
+    if (thinkEnd === -1) {
+      // Unclosed <think> tag - treat rest as think content
+      const thinkContent = remaining.slice(thinkStart + 7); // 7 = len('<think>')
+      if (thinkContent.trim()) {
+        result.push({ type: 'think', content: thinkContent });
+      }
+      break;
+    }
+
+    // Extract think content
+    const thinkContent = remaining.slice(thinkStart + 7, thinkEnd);
+    if (thinkContent.trim()) {
+      result.push({ type: 'think', content: thinkContent });
+    }
+
+    remaining = remaining.slice(thinkEnd + 8); // 8 = len('</think>')
+  }
+
+  return result;
+}
+
+/**
  * Markdown renderer component
  */
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
@@ -143,14 +234,32 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     []
   );
 
+  // Process <think> tags
+  const segments = useMemo(() => preprocessThinkTags(content), [content]);
+
+  // If no think tags, render normally
+  if (segments.length === 1 && segments[0].type === 'markdown') {
+    return (
+      <div className="llm-markdown-content">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {segments[0].content}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
+  // Render with think blocks
   return (
     <div className="llm-markdown-content">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
+      {segments.map((segment, index) =>
+        segment.type === 'think' ? (
+          <ThinkBlock key={index} content={segment.content} />
+        ) : (
+          <ReactMarkdown key={index} remarkPlugins={[remarkGfm]} components={components}>
+            {segment.content}
+          </ReactMarkdown>
+        )
+      )}
     </div>
   );
 };
