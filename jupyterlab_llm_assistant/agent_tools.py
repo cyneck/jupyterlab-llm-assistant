@@ -16,6 +16,54 @@ import subprocess
 import fnmatch
 from typing import Dict, Any, List, Optional, Tuple
 
+# Default max tool result length before truncation
+DEFAULT_TOOL_RESULT_MAX_LENGTH = 2000
+
+
+def truncate_tool_result(
+    result: str,
+    tool_name: str,
+    max_length: int = DEFAULT_TOOL_RESULT_MAX_LENGTH,
+) -> str:
+    """
+    截断过长的工具输出，保留关键信息。
+
+    针对不同工具的截断策略：
+    - grep_search: 按行截断，显示省略的行数
+    - read_file / bash: 保留头和尾，中间省略
+
+    Parameters
+    ----------
+    result : 工具输出字符串
+    tool_name : 工具名称
+    max_length : 最大长度阈值
+
+    Returns
+    -------
+    截断后的字符串
+    """
+    if len(result) <= max_length:
+        return result
+
+    # grep_search: 按行截断
+    if tool_name == "grep_search":
+        lines = result.split("\n")
+        if len(lines) > 50:
+            head_lines = lines[:25]
+            tail_lines = lines[-25:]
+            omitted = len(lines) - 50
+            return "\n".join(head_lines) + f"\n... ({omitted} lines omitted) ...\n" + "\n".join(tail_lines)
+        return result
+
+    # read_file / bash: 按字符截断，保留头和尾
+    # 默认保留各一半
+    half_length = max_length // 2
+    head = result[:half_length]
+    tail = result[-half_length:]
+    truncated_chars = len(result) - max_length
+
+    return head + f"\n\n[... {truncated_chars} chars truncated ...]\n\n" + tail
+
 
 # Tool definitions in OpenAI function-calling format
 AGENT_TOOLS = [
@@ -279,22 +327,30 @@ class AgentToolExecutor:
                 except Exception as e:
                     return False, f"Skill tool error: {str(e)}"
 
+            result = None
             if tool_name == "read_file":
-                return await self._read_file(**tool_args)
+                result = await self._read_file(**tool_args)
             elif tool_name == "write_file":
-                return await self._write_file(**tool_args)
+                result = await self._write_file(**tool_args)
             elif tool_name == "edit_file":
-                return await self._edit_file(**tool_args)
+                result = await self._edit_file(**tool_args)
             elif tool_name == "bash":
-                return await self._bash(**tool_args)
+                result = await self._bash(**tool_args)
             elif tool_name == "list_dir":
-                return await self._list_dir(**tool_args)
+                result = await self._list_dir(**tool_args)
             elif tool_name == "grep_search":
-                return await self._grep_search(**tool_args)
+                result = await self._grep_search(**tool_args)
             elif tool_name == "notebook_execute":
-                return await self._notebook_execute(**tool_args)
+                result = await self._notebook_execute(**tool_args)
             else:
                 return False, f"Unknown tool: {tool_name}"
+
+            # Apply truncation to result
+            if result:
+                success, output = result
+                truncated = truncate_tool_result(output, tool_name)
+                return success, truncated
+            return result
         except Exception as e:
             return False, f"Tool execution error: {str(e)}"
 

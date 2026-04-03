@@ -10,12 +10,77 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from openai import AsyncOpenAI
 
-from .agent_tools import AGENT_TOOLS, AgentToolExecutor
+from .agent_tools import AGENT_TOOLS, AgentToolExecutor, truncate_tool_result
 
 # Default temperature used when not explicitly set in config_store
 DEFAULT_TEMPERATURE = 0.7
 # Default max_tokens used for each LLM call
 DEFAULT_MAX_TOKENS = 4096
+# Default max messages before context compression
+DEFAULT_MAX_CONTEXT_MESSAGES = 24
+# Default number of messages to keep from start (system + user query)
+DEFAULT_KEEP_FIRST_MESSAGES = 2
+# Default number of messages to keep from end (recent context)
+DEFAULT_KEEP_LAST_MESSAGES = 16
+
+
+def compress_message_history(
+    messages: List[Dict[str, Any]],
+    max_messages: int = DEFAULT_MAX_CONTEXT_MESSAGES,
+    keep_first: int = DEFAULT_KEEP_FIRST_MESSAGES,
+    keep_last: int = DEFAULT_KEEP_LAST_MESSAGES,
+) -> List[Dict[str, Any]]:
+    """
+    智能压缩消息历史，防止上下文过长导致token爆炸。
+
+    策略：
+    - 保留开头的系统提示和用户初始query (keep_first)
+    - 保留最近N轮完整对话 (keep_last)
+    - 中间轮次：只记录执行了哪些工具，不保留完整输出
+
+    Parameters
+    ----------
+    messages : 消息列表
+    max_messages : 触发压缩的消息数阈值
+    keep_first : 保留开头几条消息
+    keep_last : 保留结尾几条消息
+
+    Returns
+    -------
+    压缩后的消息列表
+    """
+    if len(messages) <= max_messages:
+        return messages
+
+    # 保留开头
+    compressed = messages[:keep_first]
+
+    # 计算中间部分范围
+    middle_start = keep_first
+    middle_end = len(messages) - keep_last
+
+    if middle_end > middle_start:
+        # 收集中间轮次使用的工具
+        tools_used = set()
+        for msg in messages[middle_start:middle_end]:
+            if msg.get("role") == "assistant" and "tool_calls" in msg:
+                for tc in msg["tool_calls"]:
+                    tool_name = tc.get("function", {}).get("name")
+                    if tool_name:
+                        tools_used.add(tool_name)
+
+        # 生成摘要
+        if tools_used:
+            summary = f"[已压缩 {middle_end - middle_start} 轮历史] 已执行: {', '.join(sorted(tools_used))}"
+        else:
+            summary = f"[已压缩 {middle_end - middle_start} 轮对话历史]"
+
+        compressed.append({"role": "system", "content": summary})
+
+    # 保留结尾
+    compressed.extend(messages[-keep_last:])
+
+    return compressed
 
 
 async def run_agent_loop(
@@ -61,13 +126,16 @@ async def run_agent_loop(
     for iteration in range(1, max_iterations + 1):
         await send_event("iteration", {"current": iteration, "max": max_iterations})
 
+        # 压缩消息历史，防止上下文过长
+        compressed_messages = compress_message_history(api_messages)
+
         accumulated_text = ""
         tool_calls_raw: Dict[int, Dict] = {}
 
         try:
             stream = await client.chat.completions.create(
                 model=model,
-                messages=api_messages,
+                messages=compressed_messages,
                 tools=all_tools,
                 tool_choice="auto",
                 stream=True,
