@@ -14,13 +14,22 @@ import tempfile
 import json
 import importlib.util
 
-# 直接加载 agent_tools.py，绕过依赖 jupyter_server 的 __init__.py
+# 直接加载 agent_tools.py，绕过依赖 jupyter_server 的 __init__.py。
+# 先注册父包，使 agent_tools 内的相对导入（skill_resolver / workspace_handler）可用。
+import types
+
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_pkg_name = "jupyterlab_llm_assistant"
+if _pkg_name not in sys.modules:
+    _pkg = types.ModuleType(_pkg_name)
+    _pkg.__path__ = [os.path.join(_root, "jupyterlab_llm_assistant")]
+    sys.modules[_pkg_name] = _pkg
 _spec = importlib.util.spec_from_file_location(
-    "agent_tools",
+    "jupyterlab_llm_assistant.agent_tools",
     os.path.join(_root, "jupyterlab_llm_assistant", "agent_tools.py"),
 )
 _mod = importlib.util.module_from_spec(_spec)
+sys.modules["jupyterlab_llm_assistant.agent_tools"] = _mod
 _spec.loader.exec_module(_mod)
 AgentToolExecutor = _mod.AgentToolExecutor
 AGENT_TOOLS = _mod.AGENT_TOOLS
@@ -45,10 +54,10 @@ def report(name: str, ok: bool, detail: str = ""):
 
 def test_tool_definitions():
     print("\n[1] 工具定义完整性")
-    required_tools = {"read_file", "write_file", "edit_file", "bash", "list_dir", "grep_search", "notebook_execute"}
+    required_tools = {"read_file", "write_file", "edit_file", "bash", "list_dir", "grep_search", "notebook_execute", "install_skill"}
     names = {t["function"]["name"] for t in AGENT_TOOLS}
 
-    report("共定义 7 个工具", len(AGENT_TOOLS) == 7, f"实际数量: {len(AGENT_TOOLS)}")
+    report("共定义 8 个工具", len(AGENT_TOOLS) == 8, f"实际数量: {len(AGENT_TOOLS)}")
     report("包含全部必需工具", required_tools == names, f"缺少: {required_tools - names}")
 
     # edit_file 参数检查

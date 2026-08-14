@@ -15,7 +15,11 @@ import asyncio
 import subprocess
 import fnmatch
 import signal
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+
+from .skill_resolver import install_skill_from_url
+from .workspace_handler import SKILLS_DIR_NAME, _workspace_dir
 
 # Default max tool result length before truncation
 DEFAULT_TOOL_RESULT_MAX_LENGTH = 2000
@@ -250,6 +254,27 @@ AGENT_TOOLS = [
                 "required": ["code"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "install_skill",
+            "description": "Install a skill from a URL (GitHub repo file/directory, raw YAML, or any direct YAML URL) into the workspace skills directory (.llm-assistant/skills/). Supports single-file skills (skill.yaml) and directory skills (skill.yaml + Python modules). After installation the skill becomes available to the agent on subsequent runs. Examples: https://github.com/user/repo/blob/main/skills/code-review/skill.yaml, https://raw.githubusercontent.com/user/repo/main/skills/code-review/skill.yaml",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL of the skill to install (GitHub blob/tree/raw URL or any direct YAML URL)."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Optional override for the installed skill name. Defaults to the name from the skill manifest."
+                    }
+                },
+                "required": ["url"]
+            }
+        }
     }
 ]
 
@@ -343,6 +368,8 @@ class AgentToolExecutor:
                 result = await self._grep_search(**tool_args)
             elif tool_name == "notebook_execute":
                 result = await self._notebook_execute(**tool_args)
+            elif tool_name == "install_skill":
+                result = await self._install_skill(**tool_args)
             else:
                 return False, f"Unknown tool: {tool_name}"
 
@@ -354,6 +381,34 @@ class AgentToolExecutor:
             return result
         except Exception as e:
             return False, f"Tool execution error: {str(e)}"
+
+    async def _install_skill(
+        self,
+        url: str,
+        name: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """Install a skill from a URL into the workspace skills directory."""
+        if not url or not str(url).strip():
+            return False, "Missing required argument: url"
+
+        # Install into <root>/.llm-assistant/skills/
+        skills_dir = _workspace_dir(self.root_dir) / SKILLS_DIR_NAME
+        skills_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            skill_name, skill_path = install_skill_from_url(
+                str(url).strip(),
+                Path(skills_dir),
+                skill_name=name if name else None,
+            )
+        except Exception as e:
+            return False, f"Skill install failed: {str(e)}"
+
+        return True, (
+            f"Skill '{skill_name}' installed successfully at {skill_path}. "
+            f"It will be available to the agent on subsequent runs. "
+            f"To use its capabilities now, mention the skill by name in your next message."
+        )
 
     async def _read_file(
         self,
