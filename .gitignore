@@ -25,7 +25,14 @@ jupyterlab_llm_assistant/labextension/package.json
 .DS_Store
 .env
 *.log
-.llm-assistant/
+
+# Project-level workspace dir: keep bundled skills, ignore everything else
+# (sessions, cache, config, etc.)
+.llm-assistant/*
+!.llm-assistant/skills/
+.llm-assistant/skills/*
+!.llm-assistant/skills/**/*.yaml
+!.llm-assistant/skills/**/*.yml
 myenv
 venv
 .idea
