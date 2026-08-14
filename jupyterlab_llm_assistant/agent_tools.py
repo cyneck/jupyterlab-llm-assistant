@@ -275,6 +275,27 @@ AGENT_TOOLS = [
                 "required": ["url"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spawn_subagent",
+            "description": "Run an isolated sub-agent on a self-contained sub-task and return its final result. Use this to delegate a well-scoped, independent piece of work (e.g. 'research X', 'implement a small module', 'review file Y') to a focused agent that has its own context and iteration budget. The sub-agent reuses the same model and can read/write files, so it can both investigate and implement. Returns the sub-agent's final text answer. Prefer parallel independent sub-tasks by issuing multiple spawn_subagent calls; each call is independent.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "A clear, self-contained description of the sub-task, including any necessary context (file paths, constraints, expected output). The sub-agent cannot ask follow-up questions, so be specific."
+                    },
+                    "max_iterations": {
+                        "type": "integer",
+                        "description": "Optional maximum iterations (LLM turns) for the sub-agent. Default 8, capped at 30."
+                    }
+                },
+                "required": ["task"]
+            }
+        }
     }
 ]
 
@@ -294,6 +315,9 @@ class AgentToolExecutor:
         self.root_dir = root_dir or os.getcwd()
         # Registry of skill tool functions: { tool_name: callable }
         self._skill_tools: Dict[str, callable] = {}
+        # Subagent context: injected by the caller (AgentHandler) so that
+        # spawn_subagent can recursively run the agent loop. None until set.
+        self._subagent_ctx: Optional[Dict[str, Any]] = None
 
     def register_skill_tool(self, tool_name: str, func: callable) -> None:
         """
@@ -304,6 +328,11 @@ class AgentToolExecutor:
             func: Callable that takes tool_args dict and returns (success, result)
         """
         self._skill_tools[tool_name] = func
+
+    def set_subagent_context(self, ctx: Dict[str, Any]) -> None:
+        """Set the context needed by spawn_subagent to recursively run the
+        agent loop. Called once by AgentHandler before entering the loop."""
+        self._subagent_ctx = ctx
 
     def _resolve_path(self, path: str) -> str:
         """Resolve a path relative to the root directory.
@@ -370,6 +399,8 @@ class AgentToolExecutor:
                 result = await self._notebook_execute(**tool_args)
             elif tool_name == "install_skill":
                 result = await self._install_skill(**tool_args)
+            elif tool_name == "spawn_subagent":
+                result = await self._spawn_subagent(**tool_args)
             else:
                 return False, f"Unknown tool: {tool_name}"
 
@@ -409,6 +440,75 @@ class AgentToolExecutor:
             f"It will be available to the agent on subsequent runs. "
             f"To use its capabilities now, mention the skill by name in your next message."
         )
+
+    async def _spawn_subagent(
+        self,
+        task: str,
+        max_iterations: Optional[int] = None,
+    ) -> Tuple[bool, str]:
+        """Run an isolated sub-agent on a self-contained sub-task and return
+        its final text result. The sub-agent reuses the same LLM client and
+        configuration, but has its own message history, tool executor and
+        iteration budget, so it cannot interfere with the parent agent."""
+        if self._subagent_ctx is None:
+            return False, "Subagent context is not available in this execution mode."
+
+        if not task or not str(task).strip():
+            return False, "Missing required argument: task"
+
+        ctx = self._subagent_ctx
+        # Import lazily to avoid a circular import at module load time.
+        from .agent_loop import run_agent_loop
+
+        client = ctx["client"]
+        model = ctx["model"]
+        config_store = ctx["config_store"]
+        skill_tools = ctx.get("skill_tools")
+        sub_prompt = ctx.get("subagent_system_prompt")
+
+        # Budget: cap sub-agent iterations to avoid runaway loops.
+        sub_max = int(max_iterations) if max_iterations else 8
+        sub_max = max(1, min(sub_max, 30))
+
+        # Independent executor: no shared state with the parent agent.
+        sub_executor = AgentToolExecutor(root_dir=self.root_dir)
+
+        # Isolated message list: a focused system prompt + the single task.
+        sub_messages = [
+            {"role": "system", "content": sub_prompt or "You are a focused sub-agent. Complete the given task and return a concise, well-structured result. Use the available tools to explore and verify your work, then finish with a clear text answer."},
+            {"role": "user", "content": str(task).strip()},
+        ]
+
+        # Capture the sub-agent's final text (and iteration count) instead of
+        # streaming to the client.
+        captured: Dict[str, Any] = {"text": "", "iterations": 0, "completed": False}
+
+        async def _capture(event_type: str, data: Any) -> None:
+            if event_type == "text":
+                captured["text"] += data.get("content", "")
+            elif event_type == "done":
+                captured["iterations"] = data.get("total_iterations", 0)
+                captured["completed"] = data.get("completed", False)
+
+        try:
+            await run_agent_loop(
+                send_event=_capture,
+                client=client,
+                executor=sub_executor,
+                api_messages=sub_messages,
+                model=model,
+                max_iterations=sub_max,
+                config_store=config_store,
+                skill_tools=skill_tools if skill_tools else None,
+            )
+        except Exception as e:
+            return False, f"Subagent failed: {str(e)}"
+
+        text = captured["text"].strip()
+        if not text:
+            return False, "Subagent produced no result."
+
+        return True, text
 
     async def _read_file(
         self,

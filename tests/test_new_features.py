@@ -54,10 +54,10 @@ def report(name: str, ok: bool, detail: str = ""):
 
 def test_tool_definitions():
     print("\n[1] 工具定义完整性")
-    required_tools = {"read_file", "write_file", "edit_file", "bash", "list_dir", "grep_search", "notebook_execute", "install_skill"}
+    required_tools = {"read_file", "write_file", "edit_file", "bash", "list_dir", "grep_search", "notebook_execute", "install_skill", "spawn_subagent"}
     names = {t["function"]["name"] for t in AGENT_TOOLS}
 
-    report("共定义 8 个工具", len(AGENT_TOOLS) == 8, f"实际数量: {len(AGENT_TOOLS)}")
+    report("共定义 9 个工具", len(AGENT_TOOLS) == 9, f"实际数量: {len(AGENT_TOOLS)}")
     report("包含全部必需工具", required_tools == names, f"缺少: {required_tools - names}")
 
     # edit_file 参数检查

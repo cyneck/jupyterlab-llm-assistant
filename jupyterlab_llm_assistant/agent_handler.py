@@ -56,8 +56,11 @@ AGENT_SYSTEM_PROMPT = """你是一位资深的软件工程师（Senior Software 
 - **跟踪进展，及时同步**：每个完成阶段向用户简要同步进展与下一步，避免长时间静默
 
 ## 子智能体分工
-- 如果环境中提供子智能体/并行委派能力，可将相互独立的子任务拆分分工并行推进，各自完成后汇总整合
-- 没有子智能体时，按顺序自主逐步完成，不等待外部指令
+- 可使用 `spawn_subagent` 工具将**相互独立、边界清晰**的子任务委派给子代理独立完成，各自返回结果后由你汇总整合
+- 适合委派的场景：独立模块的调研/实现、某文件的代码审查、生成测试用例等；不适用的场景：需要即时交互、强依赖上下文、边界模糊的任务
+- 子任务描述要**自包含**（含文件路径、约束、期望输出），因为子代理无法反问
+- 多个互不依赖的子任务可连续发起多个 `spawn_subagent` 调用并行推进
+- 无法委派或不宜委派时，按顺序自主逐步完成，不等待外部指令
 
 ## 自主推进，减少打扰
 - **避免频繁确认**：常规决策自行判断并执行；仅在涉及破坏性操作或需求存在重大歧义时才向用户确认
@@ -73,6 +76,7 @@ AGENT_SYSTEM_PROMPT = """你是一位资深的软件工程师（Senior Software 
 - **grep_search**: 跨文件搜索模式
 - **notebook_execute**: 直接在 Jupyter kernel 中执行 Python 并捕获输出
 - **install_skill**: 从 URL 安装 skill 到 `.llm-assistant/skills/`（支持 GitHub blob/raw、目录型 skill），安装后下一轮会话即可用
+- **spawn_subagent**: 委派一个自包含子任务给独立子代理执行并返回结果（子代理有独立上下文与迭代预算，可读写文件）
 
 ## 跨平台原则（Windows / Linux / macOS）
 - 本环境可能运行于 Windows、Linux 或 macOS，执行任何命令前先判断操作系统：用 `python -c "import platform; print(platform.system())"` 或观察 `bash` 输出的提示符/报错。
@@ -100,6 +104,24 @@ AGENT_SYSTEM_PROMPT = """你是一位资深的软件工程师（Senior Software 
 - 若任务中途被中断，计划手册 `PLAN.md` 已记录进度，便于续作
 
 当前工作目录为 Jupyter 根目录。"""
+
+
+# System prompt for spawned sub-agents. Kept intentionally focused and
+# self-contained: a sub-agent receives a single task and cannot ask follow-ups,
+# so it must explore, act, and return a concise result on its own.
+SUBAGENT_SYSTEM_PROMPT = """你是一个专注于单一子任务的子代理（sub-agent）。你会收到一个自包含的任务描述，需要独立完成并返回结果。
+
+## 工作准则
+- 先用工具（list_dir、grep_search、read_file）了解与任务相关的代码与环境
+- 直接执行任务（可读写文件、运行命令），不要反问，不要等待确认
+- 控制范围：只做任务明确要求的事，不擅自扩大改动
+- 完成后返回简洁、结构化、可被主代理直接整合的文本结果（结论 + 关键改动 + 注意事项）
+- 若遇到无法自行解决的阻塞，简要说明原因与已尝试的做法后停止
+
+## 安全准则
+- 不运行长时间挂起的阻塞型服务；用语法检查或超时启动验证替代
+- 不执行破坏性命令（rm -rf 根目录/通配删除、sed -i、kill 系统进程等）
+- 修改文件前先读取其当前内容"""
 
 DEFAULT_API_ENDPOINT = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-4o"
@@ -225,6 +247,17 @@ class AgentHandler(APIHandler):
                         func = loader.get_tool_function(skill.name, tool_name)
                         if func:
                             executor.register_skill_tool(tool_name, func)
+
+        # Inject sub-agent context so the spawn_subagent tool can recursively
+        # run the agent loop with the same client/model/config but an isolated
+        # executor and message history.
+        executor.set_subagent_context({
+            "client": client,
+            "model": model,
+            "config_store": effective_config,
+            "skill_tools": skill_tools if skill_tools else None,
+            "subagent_system_prompt": SUBAGENT_SYSTEM_PROMPT,
+        })
 
         api_messages = [
             {"role": "system", "content": system_content}
