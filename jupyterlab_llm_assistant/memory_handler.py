@@ -13,6 +13,7 @@ Endpoints:
 """
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -55,18 +56,36 @@ class MemoryStore:
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self._memories = data.get("memories", [])
-        except Exception:
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                "Failed to load memories from %s: %s", self.file_path, e
+            )
+            # Back up the corrupt file so the original data can be recovered
+            try:
+                backup_path = self.file_path + ".corrupt"
+                os.replace(self.file_path, backup_path)
+                logging.getLogger(__name__).warning(
+                    "Backed up corrupt memory file to %s", backup_path
+                )
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Could not back up corrupt memory file", exc_info=True
+                )
             self._memories = []
 
     def _save(self):
-        """Persist memories to disk."""
+        """Persist memories to disk (atomic write)."""
         try:
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
-            with open(self.file_path, "w", encoding="utf-8") as f:
+            tmp_path = self.file_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump({"memories": self._memories}, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.file_path)
         except Exception as e:
             # Non-fatal — log but don't raise
-            print(f"[llm-assistant] Warning: could not save memories: {e}")
+            logging.getLogger(__name__).warning("Could not save memories: %s", e)
 
     # ── CRUD ──────────────────────────────────────────────────────────────────
 

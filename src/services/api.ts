@@ -167,7 +167,40 @@ export class LLMApiService {
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6);
+            const data = line.slice(6).trim();
+
+            if (data === '[DONE]') {
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+
+              if (parsed.content) {
+                onChunk(parsed.content);
+              }
+            } catch (e) {
+              // Skip invalid JSON
+              if (e instanceof SyntaxError) {
+                continue;
+              }
+              throw e;
+            }
+          }
+        }
+      }
+
+      // Flush remaining buffer (server may not end last event with \n)
+      buffer += decoder.decode();
+      if (buffer) {
+        const lines = buffer.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
 
             if (data === '[DONE]') {
               return;
@@ -323,7 +356,7 @@ export class LLMApiService {
     id: string,
     patch: Partial<Pick<MemoryEntry, 'title' | 'content' | 'tags' | 'enabled'>>,
   ): Promise<MemoryEntry> {
-    const r = await fetch(`${this.baseUrl}/memory/${id}`, {
+    const r = await fetch(`${this.baseUrl}/memory/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(patch),
@@ -336,7 +369,7 @@ export class LLMApiService {
    * Delete a memory entry
    */
   async deleteMemory(id: string): Promise<void> {
-    const r = await fetch(`${this.baseUrl}/memory/${id}`, {
+    const r = await fetch(`${this.baseUrl}/memory/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       headers: getHeaders(),
     });
@@ -360,14 +393,23 @@ export class LLMApiService {
   async resolveContextPath(
     path: string,
     rootDir: string = '',
+    signal?: AbortSignal,
   ): Promise<{ paths: string[]; isDir: boolean; totalFound: number }> {
-    const r = await fetch(`${this.baseUrl}/context/resolve`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ path, rootDir }),
-    });
-    if (!r.ok) throw new Error(`Failed to resolve path: ${r.statusText}`);
-    return r.json();
+    try {
+      const r = await fetch(`${this.baseUrl}/context/resolve`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ path, rootDir }),
+        signal,
+      });
+      if (!r.ok) throw new Error(`Failed to resolve path: ${r.statusText}`);
+      return r.json();
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { paths: [], isDir: false, totalFound: 0 };
+      }
+      throw err;
+    }
   }
 
   /**
@@ -377,26 +419,35 @@ export class LLMApiService {
   async listDirContents(
     dirPath: string,
     rootDir: string = '',
+    signal?: AbortSignal,
   ): Promise<{
     entries: Array<{ name: string; path: string; isDir: boolean }>;
   }> {
-    const r = await fetch(`${this.baseUrl}/context/listdir`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ path: dirPath, rootDir }),
-    });
-    if (!r.ok) {
-      // Fallback: use resolve which only returns files
-      const fallback = await this.resolveContextPath(dirPath, rootDir);
-      return {
-        entries: fallback.paths.map(p => ({
-          name: p.split('/').pop() || p,
-          path: p,
-          isDir: false,
-        })),
-      };
+    try {
+      const r = await fetch(`${this.baseUrl}/context/listdir`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ path: dirPath, rootDir }),
+        signal,
+      });
+      if (!r.ok) {
+        // Fallback: use resolve which only returns files
+        const fallback = await this.resolveContextPath(dirPath, rootDir, signal);
+        return {
+          entries: fallback.paths.map(p => ({
+            name: p.split('/').pop() || p,
+            path: p,
+            isDir: false,
+          })),
+        };
+      }
+      return r.json();
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { entries: [] };
+      }
+      throw err;
     }
-    return r.json();
   }
 
   /**
@@ -638,15 +689,17 @@ export class LLMApiService {
         if (line.startsWith('    ') || line.startsWith('\t')) {
           systemPromptLines.push(line);
         } else if (line.trim() === '') {
-          inSystemPrompt = false;
-          manifest['system_prompt'] = systemPromptLines.join('\n').trim();
+          systemPromptLines.push(line);
         } else {
+          if (systemPromptLines.length > 0) {
+            manifest['system_prompt'] = systemPromptLines.join('\n').trim();
+          }
           inSystemPrompt = false;
         }
       }
 
       if (line.startsWith('name:')) {
-        manifest['name'] = line.substring(4).trim().replace(/^["']|["']$/g, '');
+        manifest['name'] = line.substring(5).trim().replace(/^["']|["']$/g, '');
       } else if (line.startsWith('version:')) {
         manifest['version'] = line.substring(8).trim().replace(/^["']|["']$/g, '');
       } else if (line.startsWith('description:')) {
@@ -664,6 +717,11 @@ export class LLMApiService {
       } else if (line.startsWith('enabled:')) {
         manifest['enabled'] = line.substring(8).trim().toLowerCase() === 'true';
       }
+    }
+
+    // Flush any remaining system_prompt block at EOF
+    if (inSystemPrompt && systemPromptLines.length > 0) {
+      manifest['system_prompt'] = systemPromptLines.join('\n').trim();
     }
 
     manifest['enabled'] = manifest['enabled'] !== false;
@@ -689,6 +747,19 @@ export class LLMApiService {
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') return;
+            try { onEvent(JSON.parse(raw)); } catch { /* skip malformed */ }
+          }
+        }
+      }
+
+      // Flush remaining buffer (server may not end last event with \n)
+      buffer += decoder.decode();
+      if (buffer) {
+        const lines = buffer.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const raw = line.slice(6).trim();

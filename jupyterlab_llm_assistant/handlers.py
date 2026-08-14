@@ -187,8 +187,8 @@ class ChatHandler(BaseConfigHandler):
             api_endpoint=config.get("apiEndpoint") or "https://api.openai.com/v1",
             api_key=self._get_api_key(),
             model=config.get("model") or "gpt-4o",
-            temperature=config.get("temperature") or 0.7,
-            max_tokens=config.get("maxTokens") or 4096,
+            temperature=config.get("temperature") if config.get("temperature") is not None else 0.7,
+            max_tokens=config.get("maxTokens") if config.get("maxTokens") is not None else 4096,
             system_prompt=config.get("systemPrompt") or "",
             enable_streaming=config.get("enableStreaming") if config.get("enableStreaming") is not None else True,
             enable_vision=config.get("enableVision") if config.get("enableVision") is not None else True,
@@ -276,7 +276,13 @@ class ModelsHandler(BaseConfigHandler):
     async def get(self):
         """List available models from the API."""
         logger.info("[ModelsHandler] GET /llm-assistant/models")
-        from openai import AsyncOpenAI
+        from openai import (
+            AsyncOpenAI,
+            AuthenticationError,
+            PermissionDeniedError,
+            APITimeoutError,
+            APIConnectionError,
+        )
 
         api_key = self._get_api_key()
         if not api_key:
@@ -292,19 +298,37 @@ class ModelsHandler(BaseConfigHandler):
             models = await client.models.list()
             model_list = [{"id": m.id, "owned_by": m.owned_by} for m in models.data]
             logger.info(f"[ModelsHandler] Retrieved {len(model_list)} models from API")
-            self.finish(json.dumps({"models": model_list}))
+
+            # Non-fatal: API succeeded but returned no models; fall back to defaults
+            if not model_list:
+                default_models = [
+                    {"id": "gpt-4o", "owned_by": "openai"},
+                    {"id": "gpt-4o-mini", "owned_by": "openai"},
+                    {"id": "gpt-4-turbo", "owned_by": "openai"},
+                    {"id": "gpt-4", "owned_by": "openai"},
+                    {"id": "gpt-3.5-turbo", "owned_by": "openai"},
+                ]
+                logger.warning("[ModelsHandler] API returned empty model list, returning defaults")
+                self.finish(json.dumps({"models": default_models, "error": "API returned empty model list"}))
+            else:
+                self.finish(json.dumps({"models": model_list}))
         except Exception as e:
             logger.error(f"[ModelsHandler] Failed to fetch models: {e}")
-            # Return default models if API call fails
-            default_models = [
-                {"id": "gpt-4o", "owned_by": "openai"},
-                {"id": "gpt-4o-mini", "owned_by": "openai"},
-                {"id": "gpt-4-turbo", "owned_by": "openai"},
-                {"id": "gpt-4", "owned_by": "openai"},
-                {"id": "gpt-3.5-turbo", "owned_by": "openai"},
-            ]
-            logger.info(f"[ModelsHandler] Returning {len(default_models)} default models")
-            self.finish(json.dumps({"models": default_models, "error": str(e)}))
+            if isinstance(e, AuthenticationError):
+                status_code = 401
+            elif isinstance(e, PermissionDeniedError):
+                status_code = 403
+            elif isinstance(e, APITimeoutError):
+                status_code = 504
+            elif isinstance(e, APIConnectionError):
+                status_code = 502
+            else:
+                status_code = 500
+            self.set_status(status_code)
+            self.finish(json.dumps({
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }))
 
 
 class ProvidersHandler(BaseConfigHandler):

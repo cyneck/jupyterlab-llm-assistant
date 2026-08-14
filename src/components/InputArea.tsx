@@ -102,6 +102,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
   const [browseDir, setBrowseDir] = useState<string>('');
   const mentionMenuRef = useRef<HTMLDivElement>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
+  const prevAtIdxRef = useRef<number>(-1);
 
   // ── Auto-resize textarea (min 120 px, max 400 px) ────────────────────────
   useEffect(() => {
@@ -128,15 +129,16 @@ export const InputArea: React.FC<InputAreaProps> = ({
     const searchPath = browseDir || query || '.';
 
     const fetchSuggestions = async () => {
+      const signal = fetchAbortRef.current?.signal;
       try {
-        const result = await _api.resolveContextPath(searchPath, rootDir || '');
+        const result = await _api.resolveContextPath(searchPath, rootDir || '', signal);
 
         // Build suggestion list
         const items: FileSuggestion[] = [];
 
         if (result.isDir) {
           // If the resolved path is a directory, list its immediate children
-          const childResult = await _api.listDirContents(searchPath, rootDir || '');
+          const childResult = await _api.listDirContents(searchPath, rootDir || '', signal);
           for (const item of childResult.entries.slice(0, 30)) {
             items.push({
               path: item.path,
@@ -165,7 +167,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
         setSuggestions(filtered);
         setSuggestionIdx(0);
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
         setSuggestions([]);
       } finally {
         setLoadingSuggestions(false);
@@ -204,11 +207,15 @@ export const InputArea: React.FC<InputAreaProps> = ({
       const idx = findAtTrigger(val, cursor);
       if (idx !== -1) {
         const q = getAtQuery(val, cursor, idx);
+        // Reset drill-down only when @ trigger position changes
+        if (idx !== prevAtIdxRef.current) {
+          setBrowseDir('');
+        }
+        prevAtIdxRef.current = idx;
         setAtIdx(idx);
         setAtQuery(q);
-        // Reset drill-down when query changes
-        setBrowseDir('');
       } else {
+        prevAtIdxRef.current = -1;
         setAtIdx(-1);
         setAtQuery('');
         setSuggestions([]);
@@ -289,12 +296,17 @@ export const InputArea: React.FC<InputAreaProps> = ({
       const newImages: ImageData[] = [];
       for (const file of Array.from(files)) {
         if (!file.type.startsWith('image/')) continue;
-        const dataUrl = await new Promise<string>(resolve => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        newImages.push({ id: genId(), dataUrl, file, preview: dataUrl });
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+          });
+          newImages.push({ id: genId(), dataUrl, file, preview: dataUrl });
+        } catch (err) {
+          console.error('Failed to read image file:', err);
+        }
       }
       setImages(prev => [...prev, ...newImages]);
       if (imageInputRef.current) imageInputRef.current.value = '';
@@ -310,12 +322,17 @@ export const InputArea: React.FC<InputAreaProps> = ({
         if (!item.type.startsWith('image/')) continue;
         const file = item.getAsFile();
         if (!file) continue;
-        const dataUrl = await new Promise<string>(resolve => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        newImages.push({ id: genId(), dataUrl, file, preview: dataUrl });
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+          });
+          newImages.push({ id: genId(), dataUrl, file, preview: dataUrl });
+        } catch (err) {
+          console.error('Failed to read pasted image:', err);
+        }
       }
       if (newImages.length > 0) setImages(prev => [...prev, ...newImages]);
     },
@@ -640,12 +657,17 @@ export const InputArea: React.FC<InputAreaProps> = ({
               for (const f of Array.from(files)) {
                 if (f.type.startsWith('image/')) {
                   // Images → inline preview
-                  const dataUrl = await new Promise<string>(resolve => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.readAsDataURL(f);
-                  });
-                  setImages(prev => [...prev, { id: genId(), dataUrl, file: f, preview: dataUrl }]);
+                  try {
+                    const dataUrl = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(reader.result as string);
+                      reader.onerror = () => reject(new Error('Failed to read file'));
+                      reader.readAsDataURL(f);
+                    });
+                    setImages(prev => [...prev, { id: genId(), dataUrl, file: f, preview: dataUrl }]);
+                  } catch (err) {
+                    console.error('Failed to read file:', err);
+                  }
                 } else {
                   // Non-image files → attach as a path chip using the file name
                   // (browser File objects don't expose the full server path, so we

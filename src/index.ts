@@ -13,8 +13,6 @@ import { ILayoutRestorer } from '@jupyterlab/application';
 import { ICommandPalette } from '@jupyterlab/apputils';
 import { chatIcon } from './components/icons';
 import { LLMAssistantPanel } from './widgets/LLMAssistantPanel';
-import { LLMSettings } from './models/types';
-import { SettingsModel } from './models/settings';
 
 /**
  * The extension ID
@@ -58,36 +56,9 @@ async function activatePlugin(
   panel.title.icon = chatIcon;
   panel.title.caption = 'LLM Assistant';
 
-  // Load settings
-  let settings: LLMSettings = {
-    apiEndpoint: 'https://api.openai.com/v1',
-    apiKey: '',
-    model: 'gpt-4o',
-    temperature: 0.7,
-    maxTokens: 4096,
-    systemPrompt: 'You are a helpful AI coding assistant. Help users with programming questions, explain code, debug issues, and provide code examples. Be concise and accurate.',
-    enableStreaming: true,
-    enableVision: true,
-  };
-
-  try {
-    const settingValues = await settingRegistry.load(PLUGIN_ID);
-    settings = {
-      ...settings,
-      ...settingValues.composite as Partial<LLMSettings>,
-    };
-
-    // Listen for settings changes
-    settingRegistry.pluginChanged.connect(async () => {
-      const newSettings = await settingRegistry.load(PLUGIN_ID);
-      settings = {
-        ...settings,
-        ...newSettings.composite as Partial<LLMSettings>,
-      };
-    });
-  } catch (error) {
-    console.warn('Failed to load settings, using defaults:', error);
-  }
+  // Settings are loaded internally by LLMAssistantPanel's SettingsModel
+  // (from backend config, not JupyterLab's settingRegistry).
+  void settingRegistry;
 
   // Add to right sidebar
   app.shell.add(panel, 'right', { rank: 100 });

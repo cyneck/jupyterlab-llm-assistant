@@ -149,9 +149,11 @@ export const ContextFilePanel: React.FC<ContextFilePanelProps> = ({
 
   // The last loaded context files (for display / size info)
   const loadedFiles = useRef<ContextFile[]>([]);
+  const reqIdRef = useRef(0);
 
   // Notify parent when selection changes
   const emitContext = useCallback(async (paths: string[], dir: string) => {
+    const myId = ++reqIdRef.current;
     if (paths.length === 0) {
       onContextChange('', { selectedPaths: [], rootDir: dir });
       setTotalChars(0);
@@ -163,6 +165,7 @@ export const ContextFilePanel: React.FC<ContextFilePanelProps> = ({
     setLoadingContext(true);
     try {
       const result = await apiReadFiles(paths, dir);
+      if (myId !== reqIdRef.current) return; // stale response
       loadedFiles.current = result.files;
       setTotalChars(result.totalChars);
       setTruncated(result.truncated);
@@ -171,9 +174,12 @@ export const ContextFilePanel: React.FC<ContextFilePanelProps> = ({
       saveContextState(state);
       onContextChange(ctx, state);
     } catch (e) {
+      if (myId !== reqIdRef.current) return; // stale response
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoadingContext(false);
+      if (myId === reqIdRef.current) {
+        setLoadingContext(false);
+      }
     }
   }, [onContextChange]);
 
@@ -214,15 +220,12 @@ export const ContextFilePanel: React.FC<ContextFilePanelProps> = ({
   }, [pathInput, rootDir, emitContext]);
 
   const togglePath = useCallback(async (path: string) => {
-    setSelectedPaths(prev => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      // Emit asynchronously after state update
-      setTimeout(() => emitContext([...next], rootDir), 0);
-      return next;
-    });
-  }, [rootDir, emitContext]);
+    const next = new Set(selectedPaths);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setSelectedPaths(next);
+    await emitContext([...next], rootDir);
+  }, [selectedPaths, rootDir, emitContext]);
 
   const handleSelectAll = useCallback(async () => {
     const next = new Set(resolvedPaths);
@@ -236,14 +239,12 @@ export const ContextFilePanel: React.FC<ContextFilePanelProps> = ({
   }, [rootDir, emitContext]);
 
   const handleRemovePath = useCallback(async (path: string) => {
-    setSelectedPaths(prev => {
-      const next = new Set(prev);
-      next.delete(path);
-      setTimeout(() => emitContext([...next], rootDir), 0);
-      return next;
-    });
+    const next = new Set(selectedPaths);
+    next.delete(path);
+    setSelectedPaths(next);
     setResolvedPaths(prev => prev.filter(p => p !== path));
-  }, [rootDir, emitContext]);
+    await emitContext([...next], rootDir);
+  }, [selectedPaths, rootDir, emitContext]);
 
   const selectedCount = selectedPaths.size;
   const kbEstimate = Math.round(totalChars / 1024);

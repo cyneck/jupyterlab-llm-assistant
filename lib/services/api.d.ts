@@ -86,7 +86,7 @@ export declare class LLMApiService {
     /**
      * Resolve a path (file or directory) to a list of file paths
      */
-    resolveContextPath(path: string, rootDir?: string): Promise<{
+    resolveContextPath(path: string, rootDir?: string, signal?: AbortSignal): Promise<{
         paths: string[];
         isDir: boolean;
         totalFound: number;
@@ -95,7 +95,7 @@ export declare class LLMApiService {
      * List the immediate children of a directory (one level only).
      * Returns both files and subdirectories.
      */
-    listDirContents(dirPath: string, rootDir?: string): Promise<{
+    listDirContents(dirPath: string, rootDir?: string, signal?: AbortSignal): Promise<{
         entries: Array<{
             name: string;
             path: string;

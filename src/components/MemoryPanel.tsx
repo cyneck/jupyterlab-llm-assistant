@@ -72,7 +72,7 @@ async function updateMemory(
   id: string,
   patch: Partial<Pick<MemoryEntry, 'title' | 'content' | 'tags' | 'enabled'>>,
 ): Promise<MemoryEntry> {
-  const r = await fetch(`${memoryApiBase()}/${id}`, {
+  const r = await fetch(`${memoryApiBase()}/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify(patch),
@@ -82,7 +82,7 @@ async function updateMemory(
 }
 
 async function deleteMemory(id: string): Promise<void> {
-  const r = await fetch(`${memoryApiBase()}/${id}`, {
+  const r = await fetch(`${memoryApiBase()}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: getHeaders(),
   });

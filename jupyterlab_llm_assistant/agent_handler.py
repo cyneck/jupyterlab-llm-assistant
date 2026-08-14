@@ -24,7 +24,7 @@ from openai import AsyncOpenAI
 from .agent_tools import AGENT_TOOLS, AgentToolExecutor
 from .agent_loop import run_agent_loop
 from .memory_handler import get_memory_store
-from .workspace_handler import apply_skills_to_system_prompt, get_skill_tools_for_agent, load_skills, _workspace_dir
+from .workspace_handler import apply_skills_to_system_prompt, get_skill_tools_for_agent, load_skills, _workspace_dir, SKILLS_DIR_NAME
 
 
 # Agent system prompt

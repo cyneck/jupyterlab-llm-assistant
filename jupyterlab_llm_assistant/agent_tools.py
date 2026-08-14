@@ -14,6 +14,7 @@ import json
 import asyncio
 import subprocess
 import fnmatch
+import signal
 from typing import Dict, Any, List, Optional, Tuple
 
 # Default max tool result length before truncation
@@ -293,12 +294,12 @@ class AgentToolExecutor:
         # Allow the resolved path only if it stays within root_dir
         # (symlinks are already resolved by realpath above)
         root_real = os.path.realpath(self.root_dir)
-        if not resolved.startswith(root_real):
-            # Fall back to treating the original path as-is (for system tools like /usr/bin/python3)
-            # but only for reads — callers that write should enforce this.
-            # Return the raw resolution and let the caller decide.
-            return os.path.abspath(path) if os.path.isabs(path) else os.path.join(self.root_dir, path)
-        return resolved
+        if resolved == root_real or resolved.startswith(root_real + os.sep):
+            return resolved
+        # Reject paths that escape the root directory (e.g. via ../../ or
+        # Windows cross-drive absolute paths). The ValueError is caught by
+        # execute_tool's try/except and returned as a tool failure.
+        raise ValueError(f"Path escapes root directory: {path}")
 
     async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Tuple[bool, str]:
         """
@@ -446,7 +447,8 @@ class AgentToolExecutor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=work_dir,
-                env={**os.environ}
+                env={**os.environ},
+                start_new_session=True,
             )
 
             try:
@@ -455,7 +457,11 @@ class AgentToolExecutor:
                     timeout=timeout
                 )
             except asyncio.TimeoutError:
-                proc.kill()
+                # Kill the entire process group to avoid orphaned children
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
                 await proc.wait()  # Reap the zombie process
                 return False, f"Command timed out after {timeout}s: {command}"
 
@@ -560,6 +566,12 @@ class AgentToolExecutor:
         except Exception as e:
             return False, f"Error reading file: {str(e)}"
 
+        # Refuse to edit files with non-UTF-8 bytes: errors='replace' turns
+        # them into U+FFFD, and writing that back with strict utf-8 would
+        # corrupt the file permanently.
+        if '�' in original:
+            return False, "File contains non-UTF-8 bytes; edit refused to avoid corruption"
+
         count = original.count(old_str)
         if count == 0:
             # Provide a helpful snippet of the file for debugging
@@ -611,42 +623,47 @@ class AgentToolExecutor:
         # Try jupyter_client KernelManager approach first
         try:
             import jupyter_client
-            # Try to connect to a running kernel via the connection files
-            cf_dir = jupyter_client.find_connection_file()
-            km = jupyter_client.BlockingKernelClient(connection_file=cf_dir)
-            km.load_connection_file()
-            km.start_channels()
-            try:
-                km.wait_for_ready(timeout=10)
-                msg_id = km.execute(code)
-                outputs = []
-                while True:
-                    try:
-                        msg = km.get_iopub_msg(timeout=timeout)
-                        msg_type = msg['msg_type']
-                        content = msg.get('content', {})
-                        if msg_type == 'stream':
-                            outputs.append(content.get('text', ''))
-                        elif msg_type == 'execute_result':
-                            data = content.get('data', {})
-                            outputs.append(data.get('text/plain', ''))
-                        elif msg_type == 'display_data':
-                            data = content.get('data', {})
-                            outputs.append(data.get('text/plain', '[display data]'))
-                        elif msg_type == 'error':
-                            tb = '\n'.join(content.get('traceback', []))
-                            # Strip ANSI color codes
-                            import re
-                            tb = re.sub(r'\x1b\[[0-9;]*m', '', tb)
-                            return False, f"Kernel error:\n{tb}"
-                        elif msg_type == 'status' and content.get('execution_state') == 'idle':
+
+            def _run_in_kernel() -> Tuple[bool, str]:
+                # All BlockingKernelClient calls are synchronous and would
+                # block the event loop, so this runs in a worker thread.
+                cf_dir = jupyter_client.find_connection_file()
+                km = jupyter_client.BlockingKernelClient(connection_file=cf_dir)
+                km.load_connection_file()
+                km.start_channels()
+                try:
+                    km.wait_for_ready(timeout=10)
+                    msg_id = km.execute(code)
+                    outputs = []
+                    while True:
+                        try:
+                            msg = km.get_iopub_msg(timeout=timeout)
+                            msg_type = msg['msg_type']
+                            content = msg.get('content', {})
+                            if msg_type == 'stream':
+                                outputs.append(content.get('text', ''))
+                            elif msg_type == 'execute_result':
+                                data = content.get('data', {})
+                                outputs.append(data.get('text/plain', ''))
+                            elif msg_type == 'display_data':
+                                data = content.get('data', {})
+                                outputs.append(data.get('text/plain', '[display data]'))
+                            elif msg_type == 'error':
+                                tb = '\n'.join(content.get('traceback', []))
+                                # Strip ANSI color codes
+                                import re
+                                tb = re.sub(r'\x1b\[[0-9;]*m', '', tb)
+                                return False, f"Kernel error:\n{tb}"
+                            elif msg_type == 'status' and content.get('execution_state') == 'idle':
+                                break
+                        except Exception:
                             break
-                    except Exception:
-                        break
-                result = ''.join(outputs)
-                return True, result or "(no output)"
-            finally:
-                km.stop_channels()
+                    result = ''.join(outputs)
+                    return True, result or "(no output)"
+                finally:
+                    km.stop_channels()
+
+            return await asyncio.to_thread(_run_in_kernel)
         except Exception:
             pass
 
@@ -665,6 +682,9 @@ class AgentToolExecutor:
         #   entirely — no quoting issues, no injection surface.
         import sys
         import tempfile
+        # No notebook kernel was available; code runs in an isolated subprocess
+        # and cannot access variables already defined in the notebook.
+        kernel_notice = "[未连接到 notebook kernel，已在独立进程中执行（无法访问 notebook 已有变量）]\n"
         tmp_path = None  # ensure defined even if NamedTemporaryFile raises
         try:
             with tempfile.NamedTemporaryFile(
@@ -690,7 +710,7 @@ class AgentToolExecutor:
                 except asyncio.TimeoutError:
                     proc.kill()
                     await proc.wait()
-                    return False, f"Code execution timed out after {timeout}s"
+                    return False, kernel_notice + f"Code execution timed out after {timeout}s"
 
                 stdout_str = stdout.decode('utf-8', errors='replace')
                 stderr_str = stderr.decode('utf-8', errors='replace')
@@ -698,8 +718,8 @@ class AgentToolExecutor:
                 if stderr_str:
                     output += f"\n[stderr]\n{stderr_str}" if stdout_str else stderr_str
                 if proc.returncode != 0:
-                    return False, output or "(no output)"
-                return True, output or "(no output)"
+                    return False, kernel_notice + (output or "(no output)")
+                return True, kernel_notice + (output or "(no output)")
 
             except Exception as e:
                 return False, f"Error executing code: {str(e)}"
@@ -732,7 +752,7 @@ class AgentToolExecutor:
         if file_pattern and os.path.isdir(resolved):
             flags += ["--include", file_pattern]
 
-        cmd = ["grep"] + flags + [pattern, resolved]
+        cmd = ["grep"] + flags + ["--", pattern, resolved]
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -759,14 +779,18 @@ class AgentToolExecutor:
             return True, header + result
 
         except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
             return False, "Search timed out"
         except FileNotFoundError:
             # grep not available, use Python fallback
-            return await self._python_grep(pattern, resolved, file_pattern, case_sensitive, max_results)
+            return await asyncio.to_thread(
+                self._python_grep, pattern, resolved, file_pattern, case_sensitive, max_results
+            )
         except Exception as e:
             return False, f"Search error: {str(e)}"
 
-    async def _python_grep(
+    def _python_grep(
         self,
         pattern: str,
         path: str,
@@ -784,9 +808,14 @@ class AgentToolExecutor:
             return False, f"Invalid regex pattern: {e}"
 
         results = []
+        max_file_size = 5 * 1024 * 1024  # 5MB limit per file
+        stop = False
 
         def search_file(file_path: str):
             try:
+                # Skip files larger than the size limit
+                if os.path.getsize(file_path) > max_file_size:
+                    return False
                 with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                     for lineno, line in enumerate(f, 1):
                         if regex.search(line):
@@ -794,7 +823,7 @@ class AgentToolExecutor:
                             results.append(f"{rel}:{lineno}: {line.rstrip()}")
                             if len(results) >= max_results:
                                 return True  # Stop searching
-            except (PermissionError, IsADirectoryError):
+            except (PermissionError, IsADirectoryError, OSError):
                 pass
             return False
 
@@ -802,14 +831,19 @@ class AgentToolExecutor:
             search_file(path)
         else:
             for root, dirs, files in os.walk(path):
-                # Skip noise dirs
-                dirs[:] = [d for d in dirs if d not in ['node_modules', '__pycache__', '.git', 'dist', 'lib']]
+                # Skip hidden and common noise dirs (consistent with list_dir)
+                dirs[:] = [d for d in dirs
+                           if not d.startswith('.')
+                           and d not in ['node_modules', '__pycache__', '.git', 'dist', 'lib']]
                 for fname in files:
                     if file_pattern and not fnmatch.fnmatch(fname, file_pattern):
                         continue
                     fpath = os.path.join(root, fname)
                     if search_file(fpath):
+                        stop = True
                         break
+                if stop:
+                    break
 
         if not results:
             return True, f"No matches found for pattern: '{pattern}'"

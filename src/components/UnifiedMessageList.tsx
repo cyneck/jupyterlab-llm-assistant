@@ -6,7 +6,7 @@
  * - agent: Text with inline tool call visualization + iteration indicator
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { UnifiedMessage, MessageToolCall } from '../models/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolCallDisplay } from './ToolCallDisplay';
@@ -232,16 +232,24 @@ export const UnifiedMessageList: React.FC<UnifiedMessageListProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
 
-  // Auto-scroll to bottom when messages change or during streaming
+  // Track whether user is scrolled to bottom of the message list
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
+  // Auto-scroll to bottom when messages change, but only if user is at bottom
   useEffect(() => {
-    if (bottomRef.current) {
+    if (isAtBottomRef.current && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
   return (
-    <div className="llm-message-list" ref={scrollRef}>
+    <div className="llm-message-list" ref={scrollRef} onScroll={handleScroll}>
       {messages.length === 0 && !isLoading && (
         <div className="llm-empty-state">
           <div className="llm-empty-icon">

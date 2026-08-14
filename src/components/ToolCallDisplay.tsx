@@ -5,7 +5,7 @@
  * collapsible, styled like Claude Code's tool execution view.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ToolCallEntry } from '../models/types';
 
 export interface ToolCallDisplayProps {
@@ -125,6 +125,11 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({ entry }) => {
     // Auto-expand on error, otherwise collapse by default
     return entry.result ? !entry.result.success : false;
   });
+
+  // Auto-expand when an error result arrives during streaming
+  useEffect(() => {
+    if (entry.result && !entry.result.success) setExpanded(true);
+  }, [entry.result]);
   const duration = entry.endTime
     ? ((entry.endTime - entry.startTime) / 1000).toFixed(1)
     : null;

@@ -262,6 +262,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings, 
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
+      // Clear any lingering streaming state (e.g. after abort)
+      setMessages(prev => prev.map(m => m.isStreaming ? { ...m, isStreaming: false } : m));
       setIsProcessing(false);
     }
   }, [messages, currentSettings, addMessage, updateMessage]);
@@ -415,6 +417,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings, 
         setError(msg);
       }
     } finally {
+      // Clear any lingering streaming state (e.g. after abort)
+      setMessages(prev => prev.map(m => m.isStreaming ? { ...m, isStreaming: false } : m));
       setIsProcessing(false);
     }
   }, [messages, currentSettings, rootDir, addMessage, updateMessage]);
@@ -442,16 +446,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ settings, onOpenSettings, 
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    // Clear streaming state on all messages
+    setMessages(prev => prev.map(m => m.isStreaming ? { ...m, isStreaming: false } : m));
     setIsProcessing(false);
   }, []);
 
   const handleClear = useCallback(async () => {
+    const sid = currentSessionId;
     setMessages([]);
     setError(null);
     currentSessionId = DEFAULT_SESSION_ID;
-    // Delete session from backend
+    // Delete the actual session from backend (not just 'default')
     try {
-      await _api.deleteSession(DEFAULT_SESSION_ID, rootDirRef.current);
+      await _api.deleteSession(sid || DEFAULT_SESSION_ID, rootDirRef.current);
     } catch { /* ignore if no session to delete */ }
   }, []);
 

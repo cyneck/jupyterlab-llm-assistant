@@ -77,8 +77,14 @@ def compress_message_history(
 
         compressed.append({"role": "system", "content": summary})
 
-    # 保留结尾
-    compressed.extend(messages[-keep_last:])
+    # 保留结尾，但确保 tool 消息与其父 assistant(tool_calls) 不被切散
+    keep_last_start = len(messages) - keep_last
+    # If the slice begins in the middle of a tool-message sequence, extend
+    # backward to include the parent assistant(tool_calls) message so the
+    # tool messages are not orphaned (which would cause an OpenAI 400).
+    while keep_last_start > keep_first and messages[keep_last_start].get("role") == "tool":
+        keep_last_start -= 1
+    compressed.extend(messages[keep_last_start:])
 
     return compressed
 
@@ -131,6 +137,7 @@ async def run_agent_loop(
 
         accumulated_text = ""
         tool_calls_raw: Dict[int, Dict] = {}
+        finish_reason = None
 
         try:
             stream = await client.chat.completions.create(
@@ -149,6 +156,11 @@ async def run_agent_loop(
                     continue
 
                 delta = choice.delta
+
+                if delta is None:
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                    continue
 
                 if delta.content:
                     accumulated_text += delta.content
@@ -171,6 +183,9 @@ async def run_agent_loop(
                             if tc.function.arguments:
                                 tool_calls_raw[idx]["arguments_str"] += tc.function.arguments
 
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+
         except Exception as e:
             await send_event("error", {"message": f"LLM error: {str(e)}"})
             return
@@ -183,15 +198,32 @@ async def run_agent_loop(
         }
 
         if tool_calls_raw:
+            # If the response was truncated by max_tokens mid-tool-call, the
+            # arguments may be incomplete JSON. Don't keep the broken assistant
+            # message in history (causes API 400 on subsequent turns); ask the
+            # model to re-issue the complete tool call instead.
+            if finish_reason == "length":
+                api_messages.append({
+                    "role": "user",
+                    "content": "Your previous tool call was truncated by max_tokens. Please re-issue the complete tool call.",
+                })
+                continue
+
             tool_calls_list = []
             for idx in sorted(tool_calls_raw.keys()):
                 tc = tool_calls_raw[idx]
+                arguments_str = tc["arguments_str"]
+                # Ensure arguments is valid JSON to avoid API 400 on future turns
+                try:
+                    json.loads(arguments_str or "{}")
+                except json.JSONDecodeError:
+                    arguments_str = "{}"
                 tool_calls_list.append({
                     "id": tc["id"],
                     "type": "function",
                     "function": {
                         "name": tc["name"],
-                        "arguments": tc["arguments_str"],
+                        "arguments": arguments_str,
                     },
                 })
 
@@ -236,6 +268,7 @@ async def run_agent_loop(
             api_messages.append(assistant_msg)
             await send_event("done", {
                 "total_iterations": iteration,
+                "completed": True,
                 "message": "Task completed",
             })
             return
@@ -243,5 +276,7 @@ async def run_agent_loop(
     # Exhausted max iterations without a terminal text-only response.
     await send_event("done", {
         "total_iterations": max_iterations,
+        "completed": False,
+        "reason": "max_iterations",
         "message": f"Reached maximum iterations ({max_iterations})",
     })

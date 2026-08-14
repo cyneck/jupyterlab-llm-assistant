@@ -178,7 +178,11 @@ class ContextResolveHandler(APIHandler):
 
         resolved = _resolve(path, root_dir)
 
-        if not os.path.exists(resolved):
+        # Glob patterns contain metacharacters (*, ?, [) that never resolve to
+        # an existing path, so detect them before the os.path.exists() check.
+        is_glob = any(ch in path for ch in ("*", "?", "["))
+
+        if not is_glob and not os.path.exists(resolved):
             raise web.HTTPError(404, f"Path not found: {path}")
 
         paths: List[str] = []

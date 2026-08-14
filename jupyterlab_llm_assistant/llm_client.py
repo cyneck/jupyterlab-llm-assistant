@@ -162,10 +162,7 @@ class LLMClient:
         # If there are images and the last message is from the user, update it
         if images and api_messages[-1]["role"] == "user":
             last_msg = api_messages[-1]
-            last_msg["content"] = self._build_content(
-                last_msg["content"] if isinstance(last_msg["content"], str) else last_msg["content"],
-                images
-            )
+            api_messages[-1] = {**last_msg, "content": self._build_content(last_msg["content"], images)}
 
         response = await self.client.chat.completions.create(
             model=self.config.model,
@@ -175,6 +172,8 @@ class LLMClient:
             stream=False,
         )
 
+        if not response.choices:
+            return ""
         return response.choices[0].message.content or ""
 
     async def chat_stream(
@@ -198,10 +197,7 @@ class LLMClient:
         # If there are images and the last message is from the user, update it
         if images and api_messages[-1]["role"] == "user":
             last_msg = api_messages[-1]
-            last_msg["content"] = self._build_content(
-                last_msg["content"] if isinstance(last_msg["content"], str) else last_msg["content"],
-                images
-            )
+            api_messages[-1] = {**last_msg, "content": self._build_content(last_msg["content"], images)}
 
         stream = await self.client.chat.completions.create(
             model=self.config.model,
@@ -234,6 +230,13 @@ class LLMClient:
                 messages=[{"role": "user", "content": "Hello"}],
                 max_tokens=10,
             )
+            if not response.choices:
+                return {
+                    "success": True,
+                    "model": self.config.model,
+                    "response": "",
+                    "warning": "Empty response (possibly content-filtered)",
+                }
             return {
                 "success": True,
                 "model": self.config.model,

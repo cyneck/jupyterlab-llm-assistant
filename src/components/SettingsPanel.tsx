@@ -41,6 +41,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [currentProvider, setCurrentProvider] = useState<ProviderInfo | null>(null);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const isTestingRef = useRef(false);
+  const apiKeyDirtyRef = useRef(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isLoadingProviders, setIsLoadingProviders] = useState(true);
@@ -69,22 +70,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   }, [providers, localSettings.apiEndpoint]);
 
-  // Update local settings when props change (preserve apiKey)
+  // Update local settings when props change (preserve apiKey only if user edited it)
   useEffect(() => {
     setLocalSettings((prev) => ({
       ...settings,
-      apiKey: prev.apiKey, // Never overwrite user input
+      apiKey: apiKeyDirtyRef.current ? prev.apiKey : settings.apiKey,
     }));
   }, [settings]);
 
-  // Check for changes
+  // Check for changes (compare only standard LLMSettings fields)
   useEffect(() => {
-    const changed = JSON.stringify(localSettings) !== JSON.stringify(settings);
+    const fields: (keyof LLMSettings)[] = [
+      'apiEndpoint', 'apiKey', 'model', 'temperature', 'maxTokens',
+      'systemPrompt', 'enableStreaming', 'enableVision',
+    ];
+    const changed = fields.some(key => localSettings[key] !== settings[key]);
     setHasChanges(changed);
   }, [localSettings, settings]);
 
   // Handle input change
   const handleChange = useCallback((key: keyof LLMSettings, value: string | number | boolean) => {
+    if (key === 'apiKey') apiKeyDirtyRef.current = true;
     setLocalSettings((prev) => ({
       ...prev,
       [key]: value,

@@ -137,7 +137,8 @@ export const SkillPanel: React.FC<SkillPanelProps> = ({
           }
         }
 
-        const result = await _api.installSkillFromUrl(url, rootDir);
+        const skillName = url.split('/').pop()?.split('?')[0] || 'skill';
+        await _api.installSkillFromUrl(skillName, url, rootDir);
         setInstallUrl('');
         setShowInstallForm(false);
         await loadSkills();
@@ -162,11 +163,14 @@ export const SkillPanel: React.FC<SkillPanelProps> = ({
             if (inSystemPrompt) {
               if (line.match(/^\s{2,}/) || line.startsWith('\t')) {
                 systemPromptLines.push(line);
+                continue;
               } else if (line.trim() === '') {
+                systemPromptLines.push(line);
+                continue;
+              } else {
+                // Non-indented line ends the block; save prompt then parse as key
                 inSystemPrompt = false;
                 manifest['system_prompt'] = systemPromptLines.join('\n').trim();
-              } else {
-                inSystemPrompt = false;
               }
             }
 
