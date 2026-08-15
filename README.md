@@ -19,9 +19,15 @@ Chat、Agent 两种模式合并到同一个面板。底部始终可见的大文�
 ### Coding Agent 模式
 
 - **自主工具调用** — 文件读写、精确编辑、命令执行、目录列举、代码搜索、Kernel 执行
-- **多轮 ReAct 循环** — 最多 20 轮自主思考 → 工具调用 → 观察 → 继续
+- **多轮 ReAct 循环** — 最多 200 轮自主思考 → 工具调用 → 观察 → 继续（可调，上限 300）
 - **工具调用可视化** — 实时展示每一步工具名称、参数与执行结果
 - **会话持久化** — localStorage + `.llm-assistant/sessions/` 双重备份
+
+### Skills 系统
+
+- **从 URL 安装 Skill** — 支持 GitHub blob / tree / raw 链接或任意 YAML 直链，安装到 `.llm-assistant/skills/`
+- **内置 `install_skill` 工具** — Agent 可在对话中直接安装并使用 skill
+- **前端 Skill 面板** — 在设置中查看、安装和管理已安装的 skills
 
 ### @ 引用文件 / 目录
 
@@ -459,4 +465,5 @@ BSD 3-Clause License — 详见 [LICENSE](./LICENSE) 文件。
 - **@ 引用选择器** — 支持文件和目录的逐级钻取选择；目录可整体附加为 chip；发送时自动解析为文件内容上下文
 - **`.llm-assistant/` 工作区目录** — 参考 Claude Code `.claude/` 设计，支持 ASSISTANT.md 项目指令、sessions/ 会话持久化、config.json 项目级配置
 - **Agent 工具** — edit_file 精确编辑、notebook_execute Kernel 执行、bash 命令执行等
+- **Skills 系统** — 支持从 URL 安装 skill，Agent 可通过 `install_skill` 工具动态扩展能力
 - **多模型支持** — OpenAI、Claude、DeepSeek、Ollama、通义千问、智谱 AI 等

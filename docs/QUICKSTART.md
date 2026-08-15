@@ -102,6 +102,42 @@ Agent 模式允许 AI 自主调用工具完成复杂的多步骤编码任务。
 | `bash` | 执行 shell 命令（30 秒超时） |
 | `grep_search` | 用正则表达式搜索文件内容 |
 | `notebook_execute` | 直接在 Jupyter Kernel 执行 Python 代码 |
+| `install_skill` | 从 URL 安装 skill 到 `.llm-assistant/skills/`，动态扩展 Agent 能力 |
+| `spawn_subagent` | 委派独立子任务给子代理执行并返回结果 |
+
+### Agent 迭代轮数
+
+Agent 默认最多执行 **200 轮** ReAct 循环（思考 → 工具调用 → 观察 → 继续）。在 `/agent` 请求中可以通过 `maxIterations` 参数调整，后端会限制最大不超过 **300 轮**。
+
+---
+
+## Skills 系统
+
+Skills 是可复用的能力模块，安装后 Agent 可以在对话中调用其中的工具或被注入系统提示。
+
+### 安装 Skill
+
+1. 打开侧边栏 LLM Assistant 面板
+2. 切换到 **Skills** 标签页
+3. 输入 skill 的 URL（支持 GitHub blob / tree / raw 链接，或任意指向 `skill.yaml` 的直链）
+4. 点击安装
+
+Skill 会被安装到当前项目的 `.llm-assistant/skills/<skill-name>/` 目录下。
+
+### 示例安装链接
+
+```
+https://github.com/user/repo/blob/main/skills/code-review/skill.yaml
+https://raw.githubusercontent.com/user/repo/main/skills/code-review/skill.yaml
+```
+
+### 在 Agent 中安装
+
+也可以直接在 Agent 模式对话中让 AI 调用 `install_skill` 工具安装，例如：
+
+```
+请安装这个代码审查 skill：https://raw.githubusercontent.com/user/repo/main/skills/code-review/skill.yaml
+```
 
 ---
 

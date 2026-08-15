@@ -9,6 +9,7 @@ settings (API endpoint, model, etc.) survive JupyterLab restarts.
 import json
 import os
 import logging
+import logging.handlers
 from typing import Dict, Any, Optional
 from ._version import __version__
 
@@ -27,36 +28,118 @@ DEFAULT_SYSTEM_PROMPT = (
     "and provide code examples. Be concise and accurate."
 )
 
-# ─── Logging configuration ─────────────────────────────────────────────────────
+# ── Logging configuration ───────────────────────────────────────────
 
-def _configure_logging():
+# Keys whose values are masked in log output (case-insensitive)
+_SENSITIVE_KEYS = {"apikey", "api_key", "key", "authorization", "token", "password"}
+
+# Default is console-only logging; set a log_dir (env or CLI) to enable file output
+DEFAULT_LOG_DIR = None
+
+
+def mask_secrets(data: Any) -> Any:
+    """
+    Recursively mask sensitive values in dicts/lists so they can be logged safely.
+
+    API keys, tokens, etc. are replaced with '***'.
+    """
+    if isinstance(data, dict):
+        return {
+            k: ("***" if str(k).lower() in _SENSITIVE_KEYS and v else mask_secrets(v))
+            for k, v in data.items()
+        }
+    if isinstance(data, list):
+        return [mask_secrets(item) for item in data]
+    return data
+
+
+def _resolve_log_options(overrides: Optional[Dict[str, Any]] = None) -> tuple:
+    """
+    Resolve (level, log_dir) with priority: CLI overrides > env vars > defaults.
+
+    - Level:   --LLMAssistant.log_level > LLM_ASSISTANT_LOG_LEVEL > INFO
+    - Log dir: --LLMAssistant.log_dir   > LLM_ASSISTANT_LOG_DIR   > None (console only)
+      File output is OFF by default; set log_dir to a directory to enable it.
+    """
+    overrides = overrides or {}
+
+    level_name = str(
+        overrides.get("log_level")
+        or os.environ.get("LLM_ASSISTANT_LOG_LEVEL")
+        or "INFO"
+    ).upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    log_dir = (
+        overrides.get("log_dir")
+        or os.environ.get("LLM_ASSISTANT_LOG_DIR")
+        or DEFAULT_LOG_DIR
+    )
+    if str(log_dir).lower() in ("none", "off", ""):
+        log_dir = None
+
+    return level, log_dir
+
+
+def _configure_logging(overrides: Optional[Dict[str, Any]] = None, reconfigure: bool = False):
     """
     Configure logging for the extension.
 
-    Reads log level from LLM_ASSISTANT_LOG_LEVEL environment variable.
-    Defaults to INFO if not set or invalid.
+    - Console (stderr) handler always attached.
+    - File output disabled by default; when log_dir is configured, a rotating
+      file handler (daily rotation, 30 days retention) is attached.
+    - Called automatically at import; re-called from load_jupyter_server_extension
+      when CLI options like --LLMAssistant.log_level=DEBUG are provided.
     """
-    level_name = os.environ.get("LLM_ASSISTANT_LOG_LEVEL", "INFO").upper()
-    level = getattr(logging, level_name, logging.INFO)
+    level, log_dir = _resolve_log_options(overrides)
+    root_logger = logging.getLogger("jupyterlab_llm_assistant")
 
-    handler = logging.StreamHandler()
-    handler.setLevel(level)
+    # Idempotent: skip if already configured unless explicitly reconfiguring
+    if root_logger.handlers and not reconfigure:
+        return
+
+    if reconfigure:
+        for h in list(root_logger.handlers):
+            root_logger.removeHandler(h)
+            h.close()
+
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
-    handler.setFormatter(formatter)
 
-    # Configure root logger for the extension
-    root_logger = logging.getLogger("jupyterlab_llm_assistant")
     root_logger.setLevel(level)
-    # Only add handler if not already added to avoid duplicates on reload
-    if not root_logger.handlers:
-        root_logger.addHandler(handler)
 
-    # Child loggers inherit from root via propagate, no need to add separate handlers
+    console = logging.StreamHandler()
+    console.setLevel(level)
+    console.setFormatter(formatter)
+    root_logger.addHandler(console)
 
-    root_logger.info(f"Logging configured at level {logging.getLevelName(level)}")
+    file_note = "disabled"
+    if log_dir:
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            file_handler = logging.handlers.TimedRotatingFileHandler(
+                os.path.join(log_dir, "llm-assistant.log"),
+                when="midnight",
+                backupCount=30,
+                encoding="utf-8",
+            )
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+            file_note = os.path.join(log_dir, "llm-assistant.log")
+        except Exception as e:
+            root_logger.setLevel(logging.WARNING)
+            for h in root_logger.handlers:
+                h.setLevel(logging.WARNING)
+            root_logger.warning(f"Cannot create log file in {log_dir!r}: {e}; using console-only logging")
+            return
+
+    root_logger.info(
+        f"Logging configured at level {logging.getLevelName(level)}, "
+        f"file={file_note}"
+    )
 
 
 # Auto-configure logging on module import
@@ -195,6 +278,15 @@ def load_jupyter_server_extension(server_app):
         server_app: The JupyterServer application instance
     """
     logger.info(f"[load_jupyter_server_extension] Starting extension load v{__version__}")
+
+    # Allow CLI overrides, e.g.:
+    #   jupyter lab --LLMAssistant.log_level=DEBUG --LLMAssistant.log_dir=/tmp/lla-logs
+    try:
+        cli_overrides = dict(server_app.config.get("LLMAssistant", {}))
+    except Exception:
+        cli_overrides = {}
+    if cli_overrides:
+        _configure_logging(cli_overrides, reconfigure=True)
     server_app.log.info(f"Loading JupyterLab LLM Assistant extension v{__version__}")
 
     # Log config store state

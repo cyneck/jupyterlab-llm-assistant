@@ -127,6 +127,33 @@ python -m build
 ls -la dist/
 ```
 
+## Logging (Observability)
+
+All backend modules log under the `jupyterlab_llm_assistant` logger hierarchy.
+
+- **INFO (default)**: core logs - requests received, LLM call start/completion (model, duration, response length), agent iterations, tool executions (name, success, duration), session/skill/config mutations
+- **DEBUG**: full request/response payloads - complete LLM messages, responses, tool args and results, request bodies (API keys auto-masked)
+
+Log level and output directory are configurable at startup (CLI > env > defaults):
+
+```bash
+# Environment variables
+export LLM_ASSISTANT_LOG_LEVEL=DEBUG
+export LLM_ASSISTANT_LOG_DIR=/var/log/lla   # default: no file output (console only)
+
+# Or JupyterLab CLI options
+jupyter lab --LLMAssistant.log_level=DEBUG --LLMAssistant.log_dir=/tmp/lla-logs
+```
+
+By default logs go to console only (INFO level). When `log_dir` is set, files rotate daily (`llm-assistant.log`, 30 days retained). For production issue tracing, grep the log file:
+
+```bash
+# Trace an agent run
+grep "agent_loop" ~/.llm-assistant/logs/llm-assistant.log
+# Find failed tool calls
+grep "execute_tool.*failed" ~/.llm-assistant/logs/llm-assistant.log
+```
+
 ## Key Patterns
 
 ### Adding New API Endpoints

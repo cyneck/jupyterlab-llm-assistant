@@ -11,10 +11,13 @@ Endpoints:
 
 import json
 import os
+import logging
 import glob as _glob
 from typing import List, Optional, Dict, Any
 from tornado import web
 from jupyter_server.base.handlers import APIHandler
+
+logger = logging.getLogger(__name__)
 
 
 MAX_FILE_SIZE = 512 * 1024   # 512 KB per file
@@ -58,6 +61,7 @@ class ContextReadHandler(APIHandler):
 
         paths: List[str] = body.get("paths", [])
         root_dir: str = body.get("rootDir") or os.getcwd()
+        logger.info(f"[ContextReadHandler] POST context/read: {len(paths)} files, root_dir={root_dir!r}")
 
         if not paths:
             raise web.HTTPError(400, "paths is required")

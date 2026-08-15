@@ -16,6 +16,7 @@ SSE events are streamed to the frontend in real-time showing:
 
 import json
 import os
+import logging
 from typing import Dict, Any, List, Optional
 from tornado import web
 from jupyter_server.base.handlers import APIHandler
@@ -26,6 +27,9 @@ from .agent_loop import run_agent_loop
 from .memory_handler import get_memory_store
 from .serverextension import DEFAULT_SYSTEM_PROMPT
 from .workspace_handler import apply_skills_to_system_prompt, get_skill_tools_for_agent, load_skills, _workspace_dir, SKILLS_DIR_NAME
+from .serverextension import mask_secrets
+
+logger = logging.getLogger(__name__)
 
 
 # Agent system prompt
@@ -36,6 +40,7 @@ AGENT_SYSTEM_PROMPT = """你是一位资深的软件工程师（Senior Software 
 - **简洁优雅**：及时按工程设计原则精简冗余、优化结构，代码清晰直白
 - **最小侵入**：新增功能时严格基于现有架构扩展，不改动与需求无关的既有代码
 - **先理解再动手**：任何修改前必须先探索代码库，读文件后再编辑
+- **批量调用工具**：多个工具调用之间无依赖时（如并行读取多个文件、搜索多个关键词），必须在同一轮一次性发起全部调用，严禁拆成多轮串行执行；仅当后一步依赖前一步结果时才分开
 
 ## 典型场景与应对
 - **新建项目**：先明确需求，规划清晰的项目结构与模块边界，遵循标准工程规范（目录组织、命名、依赖管理、测试），产出可运行的最小骨架后再逐步完善
@@ -180,6 +185,15 @@ class AgentHandler(APIHandler):
         max_iterations = min(body.get("maxIterations", 200), 300)
         root_dir = body.get("rootDir") or os.getcwd()
 
+        logger.info(
+            f"[AgentHandler] POST /llm-assistant/agent: messages={len(messages)}, "
+            f"max_iterations={max_iterations}, root_dir={root_dir}"
+        )
+        logger.debug(
+            "[AgentHandler] Request body: "
+            + json.dumps(mask_secrets(body), ensure_ascii=False)
+        )
+
         if not messages:
             raise web.HTTPError(400, "Messages are required")
 
@@ -275,8 +289,10 @@ class AgentHandler(APIHandler):
                 skill_tools=skill_tools if skill_tools else None,
             )
         except Exception as e:
+            logger.error(f"[AgentHandler] Agent execution failed: {e}", exc_info=True)
             await self._send_event("error", {"message": str(e)})
         finally:
+            logger.info("[AgentHandler] SSE stream closed")
             self.write("data: [DONE]\n\n")
             await self.flush()
             self.finish()

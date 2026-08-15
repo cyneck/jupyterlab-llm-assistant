@@ -91,6 +91,7 @@ TODO (Skill System):
 
 import json
 import os
+import logging
 import shutil
 import uuid
 import yaml
@@ -99,6 +100,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from tornado import web
 from jupyter_server.base.handlers import APIHandler
+
+logger = logging.getLogger(__name__)
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -234,6 +237,7 @@ class AssistantMdHandler(APIHandler):
         _ensure_dirs(ws)
         md_path = ws / ASSISTANT_MD_NAME
         md_path.write_text(content, encoding="utf-8")
+        logger.info(f"[AssistantMdHandler] PUT assistant-md: {md_path} ({len(content)} chars)")
 
         self.finish(json.dumps({"ok": True, "path": str(md_path)}))
 
@@ -340,6 +344,8 @@ class SessionListHandler(APIHandler):
             raise web.HTTPError(400, "Invalid JSON")
 
         root_dir = body.get("rootDir", "")
+        logger.info(f"[SessionListHandler] POST save session, root_dir={root_dir!r}")
+        logger.debug("[SessionListHandler] Save body: " + json.dumps(body, ensure_ascii=False)[:4000])
         ws = _workspace_dir(root_dir)
         _ensure_dirs(ws)
         sessions_dir = ws / SESSIONS_DIR_NAME
@@ -418,6 +424,7 @@ class SessionItemHandler(APIHandler):
 
         if path.exists():
             path.unlink()
+            logger.info(f"[SessionItemHandler] DELETE session: {path}")
 
         self.finish(json.dumps({"ok": True}))
 
@@ -500,6 +507,7 @@ class SkillInstallHandler(APIHandler):
         ws = _workspace_dir(root_dir)
         _ensure_dirs(ws)
         skills_dir = ws / SKILLS_DIR_NAME
+        logger.info(f"[SkillInstallHandler] POST install skill: url={body.get('url', '')!r}, name={body.get('name', '')!r}")
 
         url = body.get("url", "").strip()
         name = body.get("name", "").strip()

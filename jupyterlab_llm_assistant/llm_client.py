@@ -6,12 +6,16 @@ Supports OpenAI-compatible APIs with streaming responses and vision capabilities
 
 import os
 import json
+import time
+import logging
 import asyncio
 from typing import AsyncGenerator, List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
 
-from .serverextension import DEFAULT_SYSTEM_PROMPT
+from .serverextension import DEFAULT_SYSTEM_PROMPT, mask_secrets
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -164,6 +168,15 @@ class LLMClient:
             last_msg = api_messages[-1]
             api_messages[-1] = {**last_msg, "content": self._build_content(last_msg["content"], images)}
 
+        logger.info(
+            f"[LLMClient.chat] Request start: model={self.config.model}, "
+            f"endpoint={self.config.api_endpoint}, messages={len(api_messages)}, streaming=False"
+        )
+        logger.debug(
+            "[LLMClient.chat] Request messages: "
+            + json.dumps(mask_secrets(api_messages), ensure_ascii=False)
+        )
+        start = time.monotonic()
         response = await self.client.chat.completions.create(
             model=self.config.model,
             messages=api_messages,
@@ -173,8 +186,15 @@ class LLMClient:
         )
 
         if not response.choices:
+            logger.info(f"[LLMClient.chat] Completed in {time.monotonic() - start:.2f}s, empty response")
             return ""
-        return response.choices[0].message.content or ""
+        content = response.choices[0].message.content or ""
+        logger.info(
+            f"[LLMClient.chat] Completed in {time.monotonic() - start:.2f}s, "
+            f"response_length={len(content)}"
+        )
+        logger.debug(f"[LLMClient.chat] Response content: {content}")
+        return content
 
     async def chat_stream(
         self,
@@ -199,6 +219,15 @@ class LLMClient:
             last_msg = api_messages[-1]
             api_messages[-1] = {**last_msg, "content": self._build_content(last_msg["content"], images)}
 
+        logger.info(
+            f"[LLMClient.chat_stream] Request start: model={self.config.model}, "
+            f"endpoint={self.config.api_endpoint}, messages={len(api_messages)}, streaming=True"
+        )
+        logger.debug(
+            "[LLMClient.chat_stream] Request messages: "
+            + json.dumps(mask_secrets(api_messages), ensure_ascii=False)
+        )
+        start = time.monotonic()
         stream = await self.client.chat.completions.create(
             model=self.config.model,
             messages=api_messages,
@@ -207,9 +236,16 @@ class LLMClient:
             stream=True,
         )
 
+        accumulated = ""
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
+                accumulated += chunk.choices[0].delta.content
                 yield chunk.choices[0].delta.content
+        logger.info(
+            f"[LLMClient.chat_stream] Completed in {time.monotonic() - start:.2f}s, "
+            f"total_length={len(accumulated)}"
+        )
+        logger.debug(f"[LLMClient.chat_stream] Response content: {accumulated}")
 
     async def test_connection(self) -> Dict[str, Any]:
         """
@@ -244,6 +280,7 @@ class LLMClient:
             }
         except Exception as e:
             error_str = str(e)
+            logger.debug(f"[LLMClient.test_connection] Failed: {error_str}", exc_info=True)
             # Provide more helpful error messages for common issues
             if "timeout" in error_str.lower() or "timed out" in error_str.lower():
                 error_detail = f"Connection timeout. API endpoint: {self.config.api_endpoint}. Check network/firewall."

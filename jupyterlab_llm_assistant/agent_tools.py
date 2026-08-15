@@ -11,6 +11,8 @@ Implements core tools similar to Claude Code:
 
 import os
 import json
+import time
+import logging
 import asyncio
 import subprocess
 import fnmatch
@@ -20,6 +22,8 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from .skill_resolver import install_skill_from_url
 from .workspace_handler import SKILLS_DIR_NAME, _workspace_dir
+
+logger = logging.getLogger(__name__)
 
 # Default max tool result length before truncation
 DEFAULT_TOOL_RESULT_MAX_LENGTH = 2000
@@ -76,7 +80,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read the contents of a file at the given path. Use this to examine existing code, configs, or text files.",
+            "description": "Read the contents of a file at the given path. Use this to examine existing code, configs, or text files. Absolute paths under the system temp directory (e.g. /tmp) are also readable in addition to the workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -101,7 +105,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Write content to a file, creating it if it doesn't exist or overwriting if it does. Use this to create new files or update existing ones.",
+            "description": "Write content to a file, creating it if it doesn't exist or overwriting if it does. Use this to create new files or update existing ones. Absolute paths under the system temp directory (e.g. /tmp) are also writable in addition to the workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -176,7 +180,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "edit_file",
-            "description": "Make precise edits to an existing file by replacing specific text. This is safer than write_file for targeted changes — use it to modify a function, fix a bug, or update a value without rewriting the entire file. Always read the file first to get the exact text to replace.",
+            "description": "Make precise edits to an existing file by replacing specific text. This is safer than write_file for targeted changes — use it to modify a function, fix a bug, or update a value without rewriting the entire file. Always read the file first to get the exact text to replace. Absolute paths under the system temp directory (e.g. /tmp) are also editable in addition to the workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -313,6 +317,18 @@ class AgentToolExecutor:
             root_dir: Root directory for file operations. Defaults to cwd.
         """
         self.root_dir = root_dir or os.getcwd()
+        # Directories the agent may access outside root_dir for read AND write
+        # (not just read): /tmp and the OS temp dir, so the agent can create
+        # scratch files, clone repos, or download artifacts there.
+        import tempfile
+        self._external_allow_dirs: List[str] = []
+        for _d in ("/tmp", tempfile.gettempdir()):
+            try:
+                _r = os.path.realpath(_d)
+            except Exception:
+                continue
+            if _r and _r not in self._external_allow_dirs:
+                self._external_allow_dirs.append(_r)
         # Registry of skill tool functions: { tool_name: callable }
         self._skill_tools: Dict[str, callable] = {}
         # Subagent context: injected by the caller (AgentHandler) so that
@@ -334,12 +350,28 @@ class AgentToolExecutor:
         agent loop. Called once by AgentHandler before entering the loop."""
         self._subagent_ctx = ctx
 
-    def _resolve_path(self, path: str) -> str:
+    def _resolve_path(
+        self,
+        path: str,
+        allow_external_read: bool = False,
+        allow_external_write: bool = False,
+    ) -> str:
         """Resolve a path relative to the root directory.
 
         Absolute paths are anchored inside root_dir to prevent path traversal.
+        When allow_external_read/allow_external_write is True, the respective
+        operation may additionally resolve to paths under /tmp and the OS temp
+        dir (e.g. cloned repos, scratch files, downloaded artifacts).
         """
         if os.path.isabs(path):
+            # Real absolute paths under an allowed external dir (/tmp, OS temp
+            # dir) are honored as-is when the corresponding access flag is set.
+            # This is what lets write_file/edit_file target the *system* /tmp.
+            real_abs = os.path.realpath(path)
+            if allow_external_read or allow_external_write:
+                for allowed in self._external_allow_dirs:
+                    if real_abs == allowed or real_abs.startswith(allowed + os.sep):
+                        return real_abs
             # Strip leading slash so absolute paths are treated as relative to root_dir
             rel = os.path.relpath(path, '/')
             resolved = os.path.realpath(os.path.join(self.root_dir, rel))
@@ -350,6 +382,12 @@ class AgentToolExecutor:
         root_real = os.path.realpath(self.root_dir)
         if resolved == root_real or resolved.startswith(root_real + os.sep):
             return resolved
+        # External dirs (e.g. /tmp, OS temp dir) may be accessed for read
+        # and/or write when the corresponding flag is set.
+        if allow_external_read or allow_external_write:
+            for allowed in self._external_allow_dirs:
+                if resolved == allowed or resolved.startswith(allowed + os.sep):
+                    return resolved
         # Reject paths that escape the root directory (e.g. via ../../ or
         # Windows cross-drive absolute paths). The ValueError is caught by
         # execute_tool's try/except and returned as a tool failure.
@@ -366,6 +404,8 @@ class AgentToolExecutor:
         Returns:
             Tuple of (success, result)
         """
+        logger.debug(f"[execute_tool] {tool_name} args: {json.dumps(tool_args, ensure_ascii=False)}")
+        start = time.monotonic()
         try:
             # Check if it's a registered skill tool
             if tool_name in self._skill_tools:
@@ -408,9 +448,16 @@ class AgentToolExecutor:
             if result:
                 success, output = result
                 truncated = truncate_tool_result(output, tool_name)
+                logger.info(
+                    f"[execute_tool] {tool_name} done in {time.monotonic() - start:.2f}s, "
+                    f"success={success}, result_len={len(output)}"
+                )
+                logger.debug(f"[execute_tool] {tool_name} result: {truncated}")
                 return success, truncated
+            logger.info(f"[execute_tool] {tool_name} done in {time.monotonic() - start:.2f}s, no result")
             return result
         except Exception as e:
+            logger.error(f"[execute_tool] {tool_name} failed: {e}", exc_info=True)
             return False, f"Tool execution error: {str(e)}"
 
     async def _install_skill(
@@ -517,7 +564,7 @@ class AgentToolExecutor:
         end_line: Optional[int] = None
     ) -> Tuple[bool, str]:
         """Read file contents."""
-        resolved = self._resolve_path(path)
+        resolved = self._resolve_path(path, allow_external_read=True)
 
         if not os.path.exists(resolved):
             return False, f"File not found: {path}"
@@ -563,7 +610,7 @@ class AgentToolExecutor:
         create_dirs: bool = True
     ) -> Tuple[bool, str]:
         """Write content to a file."""
-        resolved = self._resolve_path(path)
+        resolved = self._resolve_path(path, allow_external_write=True)
 
         if create_dirs:
             os.makedirs(os.path.dirname(resolved) if os.path.dirname(resolved) else '.', exist_ok=True)
@@ -652,7 +699,7 @@ class AgentToolExecutor:
         max_depth: int = 3
     ) -> Tuple[bool, str]:
         """List directory contents."""
-        resolved = self._resolve_path(path)
+        resolved = self._resolve_path(path, allow_external_read=True)
 
         if not os.path.exists(resolved):
             return False, f"Directory not found: {path}"
@@ -708,7 +755,7 @@ class AgentToolExecutor:
         replace_all: bool = False,
     ) -> Tuple[bool, str]:
         """Make a precise str_replace edit to a file."""
-        resolved = self._resolve_path(path)
+        resolved = self._resolve_path(path, allow_external_write=True)
 
         if not os.path.exists(resolved):
             return False, f"File not found: {path}"
@@ -895,7 +942,7 @@ class AgentToolExecutor:
         max_results: int = 50
     ) -> Tuple[bool, str]:
         """Search for pattern in files."""
-        resolved = self._resolve_path(path)
+        resolved = self._resolve_path(path, allow_external_read=True)
 
         if not os.path.exists(resolved):
             return False, f"Path not found: {path}"
