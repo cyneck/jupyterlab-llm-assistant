@@ -4,6 +4,9 @@ LLM Assistant JupyterLab Extension
 A JupyterLab extension that provides an LLM-powered coding assistant
 with a chat interface in the right sidebar.
 """
+import os
+os.environ.setdefault("LLM_ASSISTANT_LOG_LEVEL", "WARNING")
+
 from ._version import __version__
 from .handlers import setup_handlers
 from .serverextension import load_jupyter_server_extension

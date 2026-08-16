@@ -118,6 +118,105 @@ tools:
 
 ---
 
+## 终端 CLI 工具
+
+`llm-assistant` 是一个终端 AI 编码代理 CLI 工具，复用 JupyterLab 扩展的后端模块（Agent 循环、工具系统、LLM 客户端、工作区管理、记忆系统、Skill 系统），提供与 JupyterLab 侧边栏 Agent 相同的能力，但在终端中运行。
+
+### 安装
+
+`llm-assistant` 命令随 `jupyterlab-llm-assistant` 包自动安装，无需额外操作：
+
+```bash
+pip install jupyterlab-llm-assistant
+llm-assistant --help
+```
+
+### 配置
+
+CLI 复用 JupyterLab 扩展的配置文件 `~/.llm-assistant/config.json`，首次运行前需完成配置：
+
+```bash
+# 1. 已有 JupyterLab 配置 → 直接使用，无需额外操作
+# 2. 手动配置
+cat > ~/.llm-assistant/config.json << 'EOF'
+{
+  "apiEndpoint": "https://api.openai.com/v1",
+  "apiKey": "sk-...",
+  "model": "gpt-4o",
+  "provider": "openai",
+  "providerName": "OpenAI",
+  "temperature": 0.7,
+  "maxTokens": 4096,
+  "enableStreaming": true,
+  "enableVision": true
+}
+EOF
+```
+
+### 使用方式
+
+#### 交互式 REPL（推荐）
+
+```bash
+llm-assistant
+```
+
+进入交互模式后，底部输入框直接输入即可与 AI 对话（Chat 模式），输入 `/agent` 切换为 Agent 模式。
+
+**内置命令：**
+
+| 命令 | 说明 |
+|------|------|
+| `你的问题` | 直接输入，Chat 模式回答 |
+| `/agent 你的指令` | 切换到 Agent 模式并执行 |
+| `/chat` | 切换回 Chat 模式 |
+| `/clear` | 清屏 |
+| `/sessions` | 列出所有已保存会话 |
+| `/session <id>` | 加载指定会话 |
+| `/help` | 显示帮助信息 |
+| `/exit` 或 `Ctrl+C` | 退出 |
+
+#### 单次执行模式
+
+```bash
+# Chat 模式（默认）
+llm-assistant "用 Python 写一个斐波那契函数"
+
+# Agent 模式（带工具调用）
+llm-assistant --agent "列出当前目录文件并分析"
+
+# 指定模型
+llm-assistant --model "gpt-4o" "解释这段代码"
+
+# 恢复会话
+llm-assistant --session 20250101_120000
+
+# 列出已保存会话
+llm-assistant --list-sessions
+```
+
+### 功能特性
+
+| 特性 | 说明 |
+|------|------|
+| **Chat 模式** | 流式输出，Markdown 渲染 |
+| **Agent 模式** | 文件读写、命令执行、代码搜索、Kernel 执行等 8 个工具，300 轮 ReAct 循环 |
+| **工具调用可视化** | 实时显示 `🔧 使用工具` → `✓ 结果` 流程 |
+| **会话管理** | 保存/加载/列表/删除，与 JupyterLab 扩展共享会话目录 |
+| **配置共享** | 与 JupyterLab 扩展共用 `~/.llm-assistant/config.json` |
+| **模型覆盖** | `--model` 参数临时切换，不修改配置文件 |
+| **历史记录** | 自动保存到 `~/.llm-assistant-cli-history` |
+| **Skill 扩展** | 复用 JupyterLab 扩展安装的技能 |
+
+### 与 JupyterLab 扩展的互通
+
+- **共享配置**：CLI 和 JupyterLab 扩展读取同一份 `~/.llm-assistant/config.json`
+- **共享会话**：JupyterLab 侧边栏保存的会话可在 CLI 中通过 `llm-assistant --list-sessions` 查看，反之亦然
+- **共享 Skill**：CLI 可使用 JupyterLab 扩展安装的技能（`.llm-assistant/skills/`）
+- **共享记忆**：CLI 和 JupyterLab 扩展共享持久化记忆（`.llm-assistant/cache/memory.json`）
+
+---
+
 ## 安装
 
 ### 方式一：从 PyPI 安装（推荐）
@@ -448,6 +547,70 @@ jupyter server extension list
 ```
 
 详见完整故障排除指南：[docs/QUICKSTART.md#故障排除](./docs/QUICKSTART.md#故障排除)
+
+---
+
+## 终端 CLI 工具
+
+`llm-assistant` 是一个终端 AI 编码代理 CLI，类似 Pi (pi.dev) / Claude Code，复用 JupyterLab 扩展的同一套后端模块，共享配置与会话文件。
+
+### 安装
+
+安装 jupyterlab-llm-assistant 包后，`llm-assistant` 命令自动可用：
+
+```bash
+pip install -e .
+# 验证安装
+llm-assistant --help
+```
+
+### 使用方式
+
+```bash
+# 交互式 REPL 模式（推荐）
+llm-assistant
+
+# 单次 Chat 模式
+llm-assistant "用中文解释 Python 装饰器"
+
+# 单次 Agent 模式（带工具调用）
+llm-assistant --agent "列出当前目录的文件结构"
+
+# 列出已保存的会话
+llm-assistant --list-sessions
+
+# 恢复指定会话
+llm-assistant --session 20250101_120000
+
+# 临时切换模型
+llm-assistant --model "gpt-4o" "用中文说你好"
+```
+
+### 交互模式内置命令
+
+| 命令 | 说明 |
+|------|------|
+| `/chat <query>` | 切换到 Chat 模式，可选附带查询 |
+| `/agent <query>` | 切换到 Agent 模式，可选附带查询 |
+| `/clear` | 清屏 |
+| `/sessions` | 显示已保存的会话列表 |
+| `/session <id>` | 加载指定会话 |
+| `/help` | 显示帮助信息 |
+| `/exit` | 退出程序 |
+| `Ctrl+C` | 退出程序 |
+
+### 提示符说明
+
+- **`C>`** — Chat 模式，纯对话，无工具调用
+- **`A>`** — Agent 模式，可自主调用工具（文件读写、命令执行、代码搜索等）
+
+### 配置共享
+
+CLI 与 JupyterLab 扩展共用 `~/.llm-assistant/config.json` 配置文件，如需修改模型、API Key 等，可在 JupyterLab Settings 面板配置，或直接编辑该文件。
+
+### 会话互通
+
+CLI 保存的会话位于 `.llm-assistant/sessions/` 目录，与 JupyterLab 扩展共享。在 JupyterLab 中保存的会话也可以在 CLI 中通过 `--list-sessions` 和 `--session <id>` 查看和恢复。
 
 ---
 
