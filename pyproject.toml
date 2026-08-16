@@ -52,6 +52,9 @@ fields = ["description", "authors", "urls"]
 artifacts = ["jupyterlab_llm_assistant/labextension"]
 exclude = [".github", "binder"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["jupyterlab_llm_assistant"]
+
 [tool.hatch.build.targets.wheel.shared-data]
 "jupyterlab_llm_assistant/labextension" = "share/jupyter/labextensions/jupyterlab-llm-assistant"
 "install.json" = "share/jupyter/labextensions/jupyterlab-llm-assistant/install.json"
